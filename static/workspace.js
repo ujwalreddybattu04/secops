@@ -21,7 +21,7 @@ function controls(){
   $("generate").querySelector("span").textContent=state.busy ? "Processing…" : "Generate monthly curve";
   $("generate").classList.toggle("working",state.busy);
   $("process-status").classList.toggle("working",state.busy);
-  for(const id of ["sample-button","dropzone","file-input"]) $(id).disabled=state.busy;
+  for(const id of ["dropzone","file-input"]) $(id).disabled=state.busy;
   for(const input of document.querySelectorAll('input[name="mode"]'))input.disabled=state.busy;
   for(const id of ["export-csv","export-pdf"])$(id).disabled=state.busy || !state.rows.length;
   $("copy-table").disabled=state.busy || !(state.tab==="yearly" ? state.source : state.rows.length);
@@ -183,7 +183,7 @@ $("file-input").addEventListener("change",event=>{loadFile(event.target.files[0]
 for(const eventName of ["dragenter","dragover"])$("dropzone").addEventListener(eventName,event=>{event.preventDefault();if(!state.busy)$("dropzone").classList.add("dragover");});
 for(const eventName of ["dragleave","drop"])$("dropzone").addEventListener(eventName,event=>{event.preventDefault();$("dropzone").classList.remove("dragover");if(eventName==="drop" && !state.busy){if(event.dataTransfer.files.length!==1)showError("Upload one yearly CSV at a time.");else loadFile(event.dataTransfer.files[0]);}});
 for(const input of document.querySelectorAll('input[name="mode"]'))input.addEventListener("change",()=>{state.mode=input.value;clearResult();showError("");render();$("process-status").textContent=state.source ? "Method changed. Generate to apply it." : "Upload a file to get started.";});
-$("generate").addEventListener("click",generate);$("sample-button").addEventListener("click",sample);
+$("generate").addEventListener("click",generate);
 $("export-csv").addEventListener("click",()=>exportResult("csv"));$("export-pdf").addEventListener("click",()=>exportResult("pdf"));
 $("download-input").addEventListener("click",()=>{if(state.file)saveBlob(state.file,state.file.name);});
 $("view-input").addEventListener("click",()=>{switchTab("yearly");$("data-content").scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",block:"nearest"});});
