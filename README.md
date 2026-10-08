@@ -18,7 +18,7 @@ The root page serves a responsive interface from `static/`, without a separate f
 - Choose Average or Exit and generate monthly values through the existing `/convert` endpoint.
 - Inspect chart values with a pointer or arrow keys, toggle series, and show annual targets. Average markers sit at year midpoints as reference targets; they are not additional curve constraints. Exit markers sit in December.
 - Review monthly data by year, inspect source inputs, and download input, CSV, or PDF files.
-- Inspect per-series range excursions and annual target checks. Browser checks use displayed values and rounding tolerance; the calculation engine still verifies unrounded constraints.
+- Monthly table cells highlight values outside each series' yearly input range. The calculation engine verifies its constraints before returning results.
 
 `POST /preview` validates and sorts yearly data without invoking the optimizer. The calculations and existing conversion formats are unchanged. This first development workspace does not yet implement saved projects or team accounts.
 

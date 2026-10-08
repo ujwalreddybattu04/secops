@@ -58,7 +58,7 @@ async function generateResult(revision){
   if(!Array.isArray(rows) || rows.length!==state.source.rows.length*12)throw new Error("The response did not contain the expected monthly rows.");
   for(const row of rows){if(!Number.isSafeInteger(row.year) || !Number.isInteger(row.month) || row.month<1 || row.month>12 || state.source.columns.some(column=>!Number.isFinite(numeric(row[column]))))throw new Error("This response cannot be displayed safely in the interactive workspace. Please use the API to inspect it.");}
   state.rows=rows; state.resultMode=state.mode; state.tab="monthly"; state.yearIndex=0; state.inspected=null;
-  state.stats=calculateReview(); render();
+  state.stats=calculateRanges(); render();
   $("updated-at").textContent=`Updated ${new Intl.DateTimeFormat(undefined,{hour:"2-digit",minute:"2-digit"}).format(new Date())}`;
 }
 async function loadFile(file,sample=false,autoGenerate=false){
@@ -80,13 +80,10 @@ async function loadFile(file,sample=false,autoGenerate=false){
 }
 async function generate(){if(!state.source || state.busy)return;const revision=operation("Generating the monthly profile…"); const timer=setTimeout(()=>state.revision===revision && state.controller.abort(),90000); clearResult();render();try{await generateResult(revision);}catch(error){handleFailure(error,revision);}finally{clearTimeout(timer);finish(revision);}}
 async function sample(){if(state.busy)return;try{showError("");const response=await fetch("/assets/adoption-sample.csv");if(!response.ok)throw new Error("The sample file could not be loaded.");await loadFile(new File([await response.blob()],"adoption-sample.csv",{type:"text/csv"}),true,true);}catch(error){showError(error.message);}}
-function calculateReview(){
-  return state.source.columns.map((column,index)=>{
-    const targets=state.source.rows.map(row=>row[column]);const values=state.rows.map(row=>numeric(row[column]));
-    const low=targets.reduce((a,b)=>Math.min(a,b),Infinity),high=targets.reduce((a,b)=>Math.max(a,b),-Infinity),minimum=values.reduce((a,b)=>Math.min(a,b),Infinity),maximum=values.reduce((a,b)=>Math.max(a,b),-Infinity);
-    let passed=0;
-    for(let year=0;year<targets.length;year++){const block=values.slice(year*12,year*12+12);const result=state.resultMode==="average" ? block.reduce((sum,value)=>sum+value/12,0) : block[11];if(Math.abs(result-targets[year])<=0.005+Math.abs(targets[year])*Number.EPSILON*32)passed++;}
-    return {column,index,low,high,minimum,maximum,passed,total:targets.length,below:Math.max(0,low-minimum),above:Math.max(0,maximum-high),outside:values.filter(value=>value<low-1e-9 || value>high+1e-9).length};
+function calculateRanges(){
+  return state.source.columns.map(column=>{
+    const targets=state.source.rows.map(row=>row[column]);
+    return {column,low:targets.reduce((a,b)=>Math.min(a,b),Infinity),high:targets.reduce((a,b)=>Math.max(a,b),-Infinity)};
   });
 }
 function render(){
@@ -98,15 +95,7 @@ function render(){
   $("profile-subtitle").textContent=hasResult ? `${yearName(state.source.rows[0].year)} – ${yearName(state.source.rows.at(-1).year)} · ${state.resultMode==="average" ? "Average" : "Exit"} method · ${state.rows.length} months` : hasSource ? "Input is ready. Generate a monthly curve to continue." : "Upload a file or explore the sample dataset.";
   $("target-caption").textContent=state.resultMode==="exit" ? "Markers show yearly December targets." : "Markers show yearly mean targets at mid-year.";
   if(!hasResult)$("updated-at").textContent="No result generated";
-  $("chart-empty").hidden=hasResult;$("review-strip").hidden=!hasResult;
-  if(hasResult){
-    const total=state.stats.reduce((sum,item)=>sum+item.total,0),passed=state.stats.reduce((sum,item)=>sum+item.passed,0);
-    $("target-check").textContent=`${passed} of ${total} within rounding tolerance`;
-    $("target-check").closest(".review-item").querySelector(".review-icon").classList.toggle("good",passed===total);
-    const below=Math.max(...state.stats.map(item=>item.below)),above=Math.max(...state.stats.map(item=>item.above));
-    $("range-check").textContent=below>0.005 || above>0.005 ? `${new Intl.NumberFormat("en-US",{maximumFractionDigits:2}).format(below)} below · ${new Intl.NumberFormat("en-US",{maximumFractionDigits:2}).format(above)} above (pp)` : "All displayed values within range";
-    $("range-icon").classList.toggle("good",below<=0.005 && above<=0.005);
-  }
+  $("chart-empty").hidden=hasResult;
   renderLegend();renderChart();renderTable();controls();
 }
 function renderLegend(){
@@ -188,7 +177,6 @@ function movePage(direction){if(state.tab==="yearly")state.sourcePage+=direction
 function saveBlob(blob,name){const url=URL.createObjectURL(blob);const a=node("a");a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);}
 async function exportResult(format){if(!state.rows.length || state.busy)return;const revision=operation(`Preparing ${format.toUpperCase()} download…`);const timer=setTimeout(()=>state.revision===revision && state.controller.abort(),90000);try{const response=await post(`/convert?mode=${state.resultMode}&format=${format}`,state.file,state.controller.signal);saveBlob(await response.blob(),`monthly_${state.resultMode}.${format}`);toast(`${format.toUpperCase()} download ready.`);}catch(error){handleFailure(error,revision);}finally{clearTimeout(timer);finish(revision);}}
 async function copyTable(){const rows=tableRows();if(!rows.length)return;const columns=["year",...(state.tab==="yearly" ? [] : ["month"]),...state.source.columns];const text=[columns.join("\t"),...rows.map(row=>columns.map(column=>state.tab==="yearly" && column!=="year" ? percent(row[column],6) : row[column]).join("\t"))].join("\n");try{await navigator.clipboard.writeText(text);toast("Visible table copied. Paste it into Excel.");}catch{toast("Clipboard access is unavailable. Download the CSV instead.");}}
-function showReview(){const body=$("review-table").querySelector("tbody");body.replaceChildren();for(const item of state.stats){const row=node("tr");for(const text of [item.column,`${percent(item.low,6)} – ${percent(item.high,6)}`,`${percent(item.minimum)} – ${percent(item.maximum)}`,`${item.outside} of ${state.rows.length} months`])row.append(node("td",text));body.append(row);}$("review-dialog").showModal();}
 
 $("dropzone").addEventListener("click",()=>$("file-input").click());
 $("file-input").addEventListener("change",event=>{loadFile(event.target.files[0]);event.target.value="";});
@@ -203,9 +191,6 @@ for(const tab of ["monthly","yearly"]){$(`${tab}-tab`).addEventListener("click",
 $("year-select").addEventListener("change",event=>{state.yearIndex=Number(event.target.value);state.inspected=null;hideInspection();renderTable();});
 $("previous-page").addEventListener("click",()=>movePage(-1));$("next-page").addEventListener("click",()=>movePage(1));$("copy-table").addEventListener("click",copyTable);
 $("show-targets").addEventListener("change",()=>{hideInspection();renderChart();});
-$("review-details").addEventListener("click",showReview);
-for(const button of document.querySelectorAll("[data-close-dialog]"))button.addEventListener("click",()=>button.closest("dialog").close());
-for(const dialog of document.querySelectorAll("dialog"))dialog.addEventListener("click",event=>{if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left || event.clientX>rect.right || event.clientY<rect.top || event.clientY>rect.bottom)dialog.close();}});
 $("chart").addEventListener("pointermove",event=>{if(!chartGeometry)return;const rect=event.currentTarget.getBoundingClientRect(),scale=Math.min(rect.width/chartGeometry.width,rect.height/chartGeometry.height),offset=(rect.width-chartGeometry.width*scale)/2,x=(event.clientX-rect.left-offset)/scale;inspect(Math.round((x-chartGeometry.left)/chartGeometry.plotWidth*(state.rows.length-1)));});
 $("chart").addEventListener("pointerleave",hideInspection);
 $("chart").addEventListener("click",()=>{if(state.inspected===null)return;state.yearIndex=Math.floor(state.inspected/12);state.tab="monthly";renderTable();});

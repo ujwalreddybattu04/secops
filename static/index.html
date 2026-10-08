@@ -20,7 +20,6 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l4 4L19 6"/></symbol>
     <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="1"/><path d="M16 8V3H3v13h5"/></symbol>
-    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 3h7v7M21 3L10 14M11 3H3v18h18v-8"/></symbol>
   </svg>
@@ -77,23 +76,18 @@
             <div class="chart-stage" id="chart-stage"><svg id="chart" viewBox="0 0 800 310" role="img" aria-labelledby="chart-title chart-description" tabindex="0"><title id="chart-title">Monthly curve</title><desc id="chart-description">Monthly estimates with yearly target markers. Use the arrow keys to inspect monthly values.</desc></svg><div class="chart-empty" id="chart-empty"><svg class="icon"><use href="#i-chart"/></svg><strong>Your monthly profile will appear here</strong><span>Generate a curve to review its shape and values.</span></div><div class="chart-tooltip" id="chart-tooltip" hidden></div></div>
             <div class="chart-footer"><span><span class="target-key"></span><span id="target-caption">Markers show yearly mean targets at mid-year.</span></span><span id="updated-at">No result generated</span></div>
           </section>
-          <div class="review-strip" id="review-strip" hidden>
-            <div class="review-item"><span class="review-icon good"><svg class="icon"><use href="#i-check"/></svg></span><div><span>Annual target check</span><strong id="target-check"></strong></div></div>
-            <div class="review-item range-review"><span class="review-icon" id="range-icon"><svg class="icon"><use href="#i-info"/></svg></span><div><span>Outside the yearly input range</span><strong id="range-check"></strong></div><button class="text-button" id="review-details">Details<svg class="icon"><use href="#i-chevron"/></svg></button></div>
-          </div>
           <section class="data-panel" aria-labelledby="data-title">
             <div class="data-heading"><div class="table-tabs" role="tablist" aria-label="Data view"><button id="monthly-tab" role="tab" aria-selected="true" aria-controls="data-content" class="table-tab active">Monthly values</button><button id="yearly-tab" role="tab" aria-selected="false" aria-controls="data-content" class="table-tab">Yearly inputs</button></div><div class="table-controls"><label class="year-control" id="year-control">Year<select id="year-select" aria-label="Year to inspect"></select></label><button class="icon-button" id="copy-table" title="Copy visible table" aria-label="Copy visible table" disabled><svg class="icon"><use href="#i-copy"/></svg></button></div></div>
             <h2 id="data-title" class="visually-hidden">Data values</h2>
             <div class="table-scroll" id="data-content" role="tabpanel" aria-labelledby="monthly-tab"><table id="data-table"><thead></thead><tbody></tbody></table><div class="table-empty" id="table-empty">Monthly numbers will appear after generation.</div></div>
             <div class="table-footer"><span id="table-count">No data to display</span><div class="table-pagination"><button class="icon-button previous" id="previous-page" aria-label="Previous year or input page" disabled><svg class="icon"><use href="#i-chevron"/></svg></button><span id="page-label">—</span><button class="icon-button" id="next-page" aria-label="Next year or input page" disabled><svg class="icon"><use href="#i-chevron"/></svg></button></div></div>
           </section>
-          <p class="rounding-note" id="rounding-note">Results display two decimal places. Annual checks allow for display rounding.</p>
+          <p class="rounding-note" id="rounding-note">Results display two decimal places.</p>
         </div>
       </div>
       <footer class="workspace-footer"><span>Interpolation API</span><span>Assumptions in. A traceable monthly view out.</span><a href="/docs" target="_blank" rel="noopener">API documentation<svg class="icon"><use href="#i-external"/></svg></a></footer>
     </main>
   </div>
-  <dialog id="review-dialog" aria-labelledby="review-title"><div class="dialog-heading"><span class="eyebrow">RESULT REVIEW</span><button class="icon-button" data-close-dialog aria-label="Close review"><svg class="icon"><use href="#i-close"/></svg></button></div><h2 id="review-title">Check the shape, not just the targets.</h2><p class="dialog-intro">Moving outside the yearly input range is allowed by the model. Review whether those estimates make sense for your situation.</p><div class="review-table-scroll"><table id="review-table"><thead><tr><th>Series</th><th>Input range</th><th>Monthly range</th><th>Outside range</th></tr></thead><tbody></tbody></table></div><p class="dialog-intro">Annual target checks use the displayed two-decimal results, with a tolerance of 0.005 percentage points plus floating-point roundoff. The calculation engine verifies its constraints on unrounded values.</p><button class="button primary dialog-done" data-close-dialog>Back to workspace</button></dialog>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>
