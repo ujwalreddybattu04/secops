@@ -25,6 +25,7 @@ function controls(){
   for(const input of document.querySelectorAll('input[name="mode"]'))input.disabled=state.busy;
   for(const id of ["export-csv","export-pdf"])$(id).disabled=state.busy || !state.rows.length;
   $("copy-table").disabled=state.busy || !(state.tab==="yearly" ? state.source : state.rows.length);
+  window.Scenarios?.controls();
 }
 function retryDelay(milliseconds,signal){
   return new Promise((resolve,reject)=>{
@@ -48,16 +49,19 @@ async function post(path,file,signal){
   if(!response.ok){let message=`The service could not complete this request (${response.status}). Please try again.`; try{const body=await response.json(); if(typeof body.detail==="string")message=body.detail; else if(Array.isArray(body.detail))message=body.detail.map(item=>item.msg).join(" ");}catch{} throw new Error(message);}
   return response;
 }
-function clearResult(){state.rows=[]; state.resultMode=null; state.stats=[]; state.yearIndex=0; state.inspected=null; $("chart-tooltip").hidden=true;}
+function clearResult(){state.rows=[]; state.resultMode=null; state.engineId=null; state.stats=[]; state.yearIndex=0; state.inspected=null; $("chart-tooltip").hidden=true;}
 function handleFailure(error,revision){if(revision!==state.revision)return; showError(error.name==="AbortError" ? "The request took too long. Please try again; a sleeping development service may need time to start." : error.message);}
 async function generateResult(revision){
+  await window.Scenarios?.prepare(state.controller.signal);
   $("process-status").textContent="Generating the monthly profile…";
   const response=await post(`/convert?mode=${state.mode}&format=json`,state.file,state.controller.signal);
   const rows=await response.json();
   if(revision!==state.revision)return;
+  if(!response.headers.get("X-Calculation-Engine"))throw new Error("The calculation version is missing. Please reload the workspace.");
   if(!Array.isArray(rows) || rows.length!==state.source.rows.length*12)throw new Error("The response did not contain the expected monthly rows.");
-  for(const row of rows){if(!Number.isSafeInteger(row.year) || !Number.isInteger(row.month) || row.month<1 || row.month>12 || state.source.columns.some(column=>!Number.isFinite(numeric(row[column]))))throw new Error("This response cannot be displayed safely in the interactive workspace. Please use the API to inspect it.");}
-  state.rows=rows; state.resultMode=state.mode; state.tab="monthly"; state.yearIndex=0; state.inspected=null;
+  for(const [index,row] of rows.entries()){if(row.year!==state.source.rows[Math.floor(index/12)].year || row.month!==index%12+1 || state.source.columns.some(column=>typeof row[column]!=="string" || !Number.isFinite(numeric(row[column]))))throw new Error("This response cannot be displayed safely in the interactive workspace. Please use the API to inspect it.");}
+  state.rows=rows; state.resultMode=state.mode; state.engineId=response.headers.get("X-Calculation-Engine"); state.tab="monthly"; state.yearIndex=0; state.inspected=null;
+  window.Scenarios?.capture();
   state.stats=calculateRanges(); render();
   $("updated-at").textContent=`Updated ${new Intl.DateTimeFormat(undefined,{hour:"2-digit",minute:"2-digit"}).format(new Date())}`;
 }
@@ -65,9 +69,11 @@ async function loadFile(file,sample=false,autoGenerate=false){
   if(!file)return;
   if(!file.name.toLowerCase().endsWith(".csv")){showError("Choose a .csv file. Excel workbooks must first be saved as CSV.");return;}
   if(file.size>10*1024*1024){showError("The workspace supports CSV files up to 10 MB.");return;}
+  if(!window.Scenarios?.mayReplace())return;
   const revision=operation("Checking the yearly input…");
   const timer=setTimeout(()=>state.revision===revision && state.controller.abort(),90000);
   state.file=file; state.sample=sample; state.source=null; state.sourcePage=0; clearResult(); render();
+  window.Scenarios?.reset();
   try{
     const response=await post("/preview",file,state.controller.signal); const source=await response.json();
     if(revision!==state.revision)return;
@@ -75,11 +81,12 @@ async function loadFile(file,sample=false,autoGenerate=false){
     // Reserved output names would collide with the generated year/month fields.
     if(source.columns.includes("month"))throw new Error("Rename the value column 'month' before using the workspace; 'month' is reserved for generated month numbers.");
     state.source=source; state.visible=new Set(source.columns.slice(0,3)); render();
+    window.Scenarios?.captureInput();
     if(autoGenerate)await generateResult(revision);
   }catch(error){handleFailure(error,revision);}finally{clearTimeout(timer);finish(revision);}
 }
 async function generate(){if(!state.source || state.busy)return;const revision=operation("Generating the monthly profile…"); const timer=setTimeout(()=>state.revision===revision && state.controller.abort(),90000); clearResult();render();try{await generateResult(revision);}catch(error){handleFailure(error,revision);}finally{clearTimeout(timer);finish(revision);}}
-async function sample(){if(state.busy)return;try{showError("");const response=await fetch("/assets/adoption-sample.csv");if(!response.ok)throw new Error("The sample file could not be loaded.");await loadFile(new File([await response.blob()],"adoption-sample.csv",{type:"text/csv"}),true,true);}catch(error){showError(error.message);}}
+async function sample(){if(state.busy)return;const startingRevision=state.revision;try{showError("");const response=await fetch("/assets/adoption-sample.csv");if(!response.ok)throw new Error("The sample file could not be loaded.");const blob=await response.blob();if(state.busy || state.revision!==startingRevision)return;await loadFile(new File([blob],"adoption-sample.csv",{type:"text/csv"}),true,true);}catch(error){if(state.revision===startingRevision)showError(error.message);}}
 function calculateRanges(){
   return state.source.columns.map(column=>{
     const targets=state.source.rows.map(row=>row[column]);
@@ -96,6 +103,7 @@ function render(){
   $("target-caption").textContent=state.resultMode==="exit" ? "Markers show yearly December targets." : "Markers show yearly mean targets at mid-year.";
   if(!hasResult)$("updated-at").textContent="No result generated";
   $("chart-empty").hidden=hasResult;
+  window.Scenarios?.render();
   renderLegend();renderChart();renderTable();controls();
 }
 function renderLegend(){
@@ -114,7 +122,9 @@ function renderChart(){
   chart.setAttribute("viewBox",`0 0 ${width} ${height}`);chart.style.setProperty("--chart-font-size",window.innerWidth<480 ? "12px" : "11px");
   if(!state.rows.length){for(let i=0;i<5;i++)chart.append(svgNode("line",{x1:left,x2:width-right,y1:top+i*plotHeight/4,y2:top+i*plotHeight/4,stroke:"#f0f3f7","stroke-width":1}));chartGeometry=null;return;}
   const columns=state.source.columns.filter(column=>state.visible.has(column));
+  const comparison=window.Scenarios?.comparison();
   const values=[];for(const column of columns){for(const row of state.rows)values.push(numeric(row[column]));for(const row of state.source.rows)values.push(row[column]);}
+  if(comparison && $("compare-baseline").checked)for(const column of columns)for(const row of comparison.rows)values.push(numeric(row[column]));
   let low=values.reduce((a,b)=>Math.min(a,b),Infinity),high=values.reduce((a,b)=>Math.max(a,b),-Infinity);
   const span=high-low || Math.max(Math.abs(high)*0.2,1);
   if(!Number.isFinite(span)){chartGeometry=null;$("chart-empty").hidden=false;$("chart-empty").querySelector("strong").textContent="These values exceed interactive chart precision";$("chart-empty").querySelector("span").textContent="Inspect the table or download the CSV to review the result.";return;}
@@ -134,6 +144,7 @@ function renderChart(){
   for(const index of ticks){const label=svgNode("text",{x:x(index),y:height-18,"text-anchor":index===0 ? "start" : index===state.rows.length-1 ? "end" : "middle"});label.textContent=monthName(state.rows[index],true);chart.append(label);}
   for(const column of columns){
     const color=colors[state.source.columns.indexOf(column)%colors.length];
+    if(comparison && $("compare-baseline").checked)chart.append(svgNode("polyline",{points:comparison.rows.map((row,index)=>`${x(index)},${y(numeric(row[column]))}`).join(" "),fill:"none",stroke:color,"stroke-width":1.5,"stroke-dasharray":"5 4","data-scenario":"baseline"}));
     const line=svgNode("polyline",{points:state.rows.map((row,index)=>`${x(index)},${y(numeric(row[column]))}`).join(" "),fill:"none",stroke:color,"stroke-width":2,"stroke-linejoin":"round","stroke-linecap":"round"});chart.append(line);
     if($("show-targets").checked)state.source.rows.forEach((row,index)=>{const point=svgNode("circle",{cx:x(index*12+(state.resultMode==="exit" ? 11 : 5.5)),cy:y(row[column]),r:3.2,fill:"white",stroke:color,"stroke-width":1.5});const pointTitle=svgNode("title");pointTitle.textContent=`${column} · ${yearName(row.year)} target: ${percent(row[column],6)}`;point.append(pointTitle);chart.append(point);});
   }
@@ -157,8 +168,10 @@ function inspect(index){
 function hideInspection(){if($("crosshair"))$("crosshair").setAttribute("visibility","hidden");$("focus-points")?.replaceChildren();$("chart-tooltip").hidden=true;}
 function tableRows(){if(!state.source)return [];return state.tab==="yearly" ? state.source.rows.slice(state.sourcePage*12,(state.sourcePage+1)*12) : state.rows.slice(state.yearIndex*12,(state.yearIndex+1)*12);}
 function renderTable(){
+  if(state.tab==="difference" && window.Scenarios?.renderDifference())return;
   const yearly=state.tab==="yearly",table=$("data-table"),head=table.querySelector("thead"),body=table.querySelector("tbody");head.replaceChildren();body.replaceChildren();
   for(const tab of ["monthly","yearly"]){const element=$(`${tab}-tab`);element.classList.toggle("active",state.tab===tab);element.setAttribute("aria-selected",String(state.tab===tab));element.tabIndex=state.tab===tab ? 0 : -1;}
+  $("difference-tab").classList.remove("active");$("difference-tab").setAttribute("aria-selected","false");$("difference-tab").tabIndex=-1;$("difference-series-control").hidden=true;
   $("data-content").setAttribute("aria-labelledby",`${state.tab}-tab`);$("year-control").hidden=yearly || !state.rows.length;
   const select=$("year-select");select.replaceChildren();if(state.source)state.source.rows.forEach((row,index)=>{const option=node("option",String(row.year));option.value=index;option.selected=index===state.yearIndex;select.append(option);});
   const rows=tableRows(),columns=state.source ? ["year",...(yearly ? [] : ["month"]),...state.source.columns] : [];
@@ -175,14 +188,14 @@ function renderTable(){
 function switchTab(tab){state.tab=tab;renderTable();}
 function movePage(direction){if(state.tab==="yearly")state.sourcePage+=direction;else state.yearIndex+=direction;state.inspected=null;hideInspection();renderTable();$("data-content").scrollTo(0,0);}
 function saveBlob(blob,name){const url=URL.createObjectURL(blob);const a=node("a");a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);}
-async function exportResult(format){if(!state.rows.length || state.busy)return;const revision=operation(`Preparing ${format.toUpperCase()} download…`);const timer=setTimeout(()=>state.revision===revision && state.controller.abort(),90000);try{const response=await post(`/convert?mode=${state.resultMode}&format=${format}`,state.file,state.controller.signal);saveBlob(await response.blob(),`monthly_${state.resultMode}.${format}`);toast(`${format.toUpperCase()} download ready.`);}catch(error){handleFailure(error,revision);}finally{clearTimeout(timer);finish(revision);}}
-async function copyTable(){const rows=tableRows();if(!rows.length)return;const columns=["year",...(state.tab==="yearly" ? [] : ["month"]),...state.source.columns];const text=[columns.join("\t"),...rows.map(row=>columns.map(column=>state.tab==="yearly" && column!=="year" ? percent(row[column],6) : row[column]).join("\t"))].join("\n");try{await navigator.clipboard.writeText(text);toast("Visible table copied. Paste it into Excel.");}catch{toast("Clipboard access is unavailable. Download the CSV instead.");}}
+async function exportResult(format){if(!state.rows.length || state.busy)return;const revision=operation(`Preparing ${format.toUpperCase()} download…`);const timer=setTimeout(()=>state.revision===revision && state.controller.abort(),90000);try{const response=await post(`/convert?mode=${state.resultMode}&format=${format}`,state.file,state.controller.signal);if(response.headers.get("X-Calculation-Engine")!==state.engineId)throw new Error("The calculation service has been updated. Generate again before downloading this result.");saveBlob(await response.blob(),window.Scenarios?.exportName(format) || `monthly_${state.resultMode}.${format}`);toast(`${format.toUpperCase()} download ready.`);}catch(error){handleFailure(error,revision);}finally{clearTimeout(timer);finish(revision);}}
+async function copyTable(){const rows=tableRows();if(!rows.length)return;const columns=["year",...(state.tab==="yearly" ? [] : ["month"]),...state.source.columns];const text=state.tab==="difference" ? [['Year','Month','Baseline','Alternative','Change (pp)'].join('\t'),...Scenarios.differenceRows().map(row=>row.join('\t'))].join('\n') : [columns.join("\t"),...rows.map(row=>columns.map(column=>state.tab==="yearly" && column!=="year" ? percent(row[column],6) : row[column]).join("\t"))].join("\n");try{await navigator.clipboard.writeText(text);toast("Visible table copied. Paste it into Excel.");}catch{toast("Clipboard access is unavailable. Download the CSV instead.");}}
 
 $("dropzone").addEventListener("click",()=>$("file-input").click());
 $("file-input").addEventListener("change",event=>{loadFile(event.target.files[0]);event.target.value="";});
 for(const eventName of ["dragenter","dragover"])$("dropzone").addEventListener(eventName,event=>{event.preventDefault();if(!state.busy)$("dropzone").classList.add("dragover");});
 for(const eventName of ["dragleave","drop"])$("dropzone").addEventListener(eventName,event=>{event.preventDefault();$("dropzone").classList.remove("dragover");if(eventName==="drop" && !state.busy){if(event.dataTransfer.files.length!==1)showError("Upload one yearly CSV at a time.");else loadFile(event.dataTransfer.files[0]);}});
-for(const input of document.querySelectorAll('input[name="mode"]'))input.addEventListener("change",()=>{state.mode=input.value;clearResult();showError("");render();$("process-status").textContent=state.source ? "Method changed. Generate to apply it." : "Upload a file to get started.";});
+for(const input of document.querySelectorAll('input[name="mode"]'))input.addEventListener("change",()=>{state.mode=input.value;window.Scenarios?.methodChanged();clearResult();showError("");render();$("process-status").textContent=state.source ? "Method changed. Generate to apply it." : "Upload a file to get started.";});
 $("generate").addEventListener("click",generate);
 $("export-csv").addEventListener("click",()=>exportResult("csv"));$("export-pdf").addEventListener("click",()=>exportResult("pdf"));
 $("download-input").addEventListener("click",()=>{if(state.file)saveBlob(state.file,state.file.name);});
@@ -198,4 +211,4 @@ $("chart").addEventListener("keydown",event=>{if(!state.rows.length)return;if(["
 $("chart").addEventListener("blur",hideInspection);
 let resizeTimer;window.addEventListener("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{hideInspection();renderChart();},120);});
 fetch("/health").then(response=>{if(!response.ok)throw new Error();$("connection").className="connection connected";$("connection").replaceChildren(node("span",undefined,"status-dot"),document.createTextNode("API connected"));}).catch(()=>{$("connection").className="connection disconnected";$("connection").replaceChildren(node("span",undefined,"status-dot"),document.createTextNode("Connection unavailable"));});
-render();sample();
+// scenarios.js initializes the workspace after installing project hooks.

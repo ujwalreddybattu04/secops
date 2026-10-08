@@ -1,6 +1,8 @@
 """Yearly-to-monthly CSV API. Run with uvicorn main:app --reload."""
 
 import csv
+import hashlib
+from importlib.metadata import version
 from contextlib import contextmanager
 from decimal import Decimal, InvalidOperation
 from enum import Enum
@@ -44,6 +46,20 @@ MAX_YEAR_IDENTIFIER = 2**53 - 1
 _conversion_capacity = BoundedSemaphore(1)
 
 
+def _engine_metadata() -> dict:
+    dependencies = {name: version(name) for name in ("numpy", "pandas", "scipy", "cvxpy", "osqp")}
+    digest = hashlib.sha256()
+    for name in ("main.py", "smoothing.py", "outputs.py"):
+        digest.update(name.encode())
+        digest.update((Path(__file__).parent / name).read_bytes())
+    for name, dependency_version in sorted(dependencies.items()):
+        digest.update(f"{name}={dependency_version}".encode())
+    return {"id": "sha256:" + digest.hexdigest(), "dependencies": dependencies, "display_decimals": 2}
+
+
+ENGINE_METADATA = _engine_metadata()
+
+
 class RequestLimitError(ValueError):
     """Reject oversized work before allocating an optimization problem."""
 
@@ -56,6 +72,10 @@ async def response_protection(request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     if request.url.path in ("/convert", "/preview"):
         response.headers["Cache-Control"] = "no-store"
+    if request.url.path in ("/", "/engine") or request.url.path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "no-cache"
+    if request.url.path == "/convert" and response.status_code == 200:
+        response.headers["X-Calculation-Engine"] = ENGINE_METADATA["id"]
     if request.url.path == "/":
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
@@ -69,6 +89,12 @@ async def response_protection(request, call_next):
 def health() -> dict:
     """Lightweight process readiness; does not run or certify a calculation."""
     return {"status": "ok"}
+
+
+@app.get("/engine")
+def engine() -> dict:
+    """Identify the calculation code and dependencies behind saved scenario runs."""
+    return ENGINE_METADATA
 
 
 @contextmanager

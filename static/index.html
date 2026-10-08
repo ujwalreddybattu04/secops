@@ -8,6 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f3c63'/%3E%3Cpath d='M7 24C14 24 14 8 25 8M7 17C14 17 18 22 25 13' stroke='white' stroke-width='2' fill='none'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/assets/workspace.css">
   <script src="/assets/workspace.js" defer></script>
+  <script src="/assets/scenarios.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to workspace</a>
@@ -42,7 +43,8 @@
     <header class="topbar"><span class="breadcrumbs">Forecasting<span>/</span><strong>Curve analysis</strong></span><span class="connection" id="connection"><span class="status-dot"></span>Connecting</span></header>
     <main id="main">
       <div class="page-heading">
-        <div><h1>Curve workspace</h1><p>Turn yearly assumptions into a monthly view you can examine.</p></div>
+        <div><h1>Curve workspace</h1><p>Compare monthly profiles from different yearly assumptions.</p></div>
+        <div class="project-actions"><button class="button outline" id="open-project">Open project</button><button class="button outline" id="save-project" disabled>Save project</button><input id="project-file" type="file" accept=".json,application/json" hidden></div>
       </div>
       <div class="alert" id="error" role="alert" hidden></div>
       <div class="workspace-layout">
@@ -69,14 +71,19 @@
         </aside>
 
         <div class="analysis-column" id="analysis" aria-busy="false">
+          <section class="scenario-panel" aria-label="Scenario selection">
+            <div class="scenario-heading"><div><label for="project-name">PROJECT</label><input id="project-name" maxlength="80" value="Untitled analysis" aria-label="Project name"></div><span class="session-note">Session only · Save a project file to keep your work</span></div>
+            <div class="scenario-row"><div class="scenario-tabs" role="tablist" aria-label="Active scenario"><button id="baseline-scenario" role="tab" aria-selected="true" class="scenario-tab active"><strong>Baseline</strong><span>Original input</span></button><button id="alternative-scenario" role="tab" aria-selected="false" class="scenario-tab" hidden><strong id="alternative-label">Alternative</strong><span id="alternative-description">No changes applied</span></button></div><button class="button outline" id="create-alternative" disabled>Create alternative</button><button class="button outline" id="edit-alternative" hidden>Edit assumptions</button></div>
+          </section>
           <section class="chart-panel" aria-labelledby="profile-title">
             <div class="panel-heading"><div><h2 id="profile-title">Monthly profile</h2><p id="profile-subtitle">Upload a file or explore the sample dataset.</p></div><div class="export-actions"><button class="button outline compact" id="export-csv" disabled><svg class="icon"><use href="#i-download"/></svg>CSV</button><button class="button outline compact" id="export-pdf" disabled><svg class="icon"><use href="#i-download"/></svg>PDF</button></div></div>
             <div class="chart-toolbar"><div class="series-legend" id="series-legend" aria-label="Visible series"></div><label class="target-toggle"><input type="checkbox" id="show-targets" checked>Yearly targets</label></div>
+            <div class="comparison-key" id="comparison-key" hidden><label><input id="compare-baseline" type="checkbox" checked>Compare with baseline</label><span><i class="solid-key"></i>Alternative <i class="dashed-key"></i>Baseline</span></div>
             <div class="chart-stage" id="chart-stage"><svg id="chart" viewBox="0 0 800 310" role="img" aria-labelledby="chart-title chart-description" tabindex="0"><title id="chart-title">Monthly curve</title><desc id="chart-description">Monthly estimates with yearly target markers. Use the arrow keys to inspect monthly values.</desc></svg><div class="chart-empty" id="chart-empty"><svg class="icon"><use href="#i-chart"/></svg><strong>Your monthly profile will appear here</strong><span>Generate a curve to review its shape and values.</span></div><div class="chart-tooltip" id="chart-tooltip" hidden></div></div>
             <div class="chart-footer"><span><span class="target-key"></span><span id="target-caption">Markers show yearly mean targets at mid-year.</span></span><span id="updated-at">No result generated</span></div>
           </section>
           <section class="data-panel" aria-labelledby="data-title">
-            <div class="data-heading"><div class="table-tabs" role="tablist" aria-label="Data view"><button id="monthly-tab" role="tab" aria-selected="true" aria-controls="data-content" class="table-tab active">Monthly values</button><button id="yearly-tab" role="tab" aria-selected="false" aria-controls="data-content" class="table-tab">Yearly inputs</button></div><div class="table-controls"><label class="year-control" id="year-control">Year<select id="year-select" aria-label="Year to inspect"></select></label><button class="icon-button" id="copy-table" title="Copy visible table" aria-label="Copy visible table" disabled><svg class="icon"><use href="#i-copy"/></svg></button></div></div>
+            <div class="data-heading"><div class="table-tabs" role="tablist" aria-label="Data view"><button id="monthly-tab" role="tab" aria-selected="true" aria-controls="data-content" class="table-tab active">Monthly values</button><button id="yearly-tab" role="tab" aria-selected="false" aria-controls="data-content" class="table-tab">Yearly inputs</button><button id="difference-tab" role="tab" aria-selected="false" aria-controls="data-content" class="table-tab" hidden>Difference</button></div><div class="table-controls"><label id="difference-series-control" hidden>Series<select id="difference-series" aria-label="Series to compare"></select></label><label class="year-control" id="year-control">Year<select id="year-select" aria-label="Year to inspect"></select></label><button class="icon-button" id="copy-table" title="Copy visible table" aria-label="Copy visible table" disabled><svg class="icon"><use href="#i-copy"/></svg></button></div></div>
             <h2 id="data-title" class="visually-hidden">Data values</h2>
             <div class="table-scroll" id="data-content" role="tabpanel" aria-labelledby="monthly-tab"><table id="data-table"><thead></thead><tbody></tbody></table><div class="table-empty" id="table-empty">Monthly numbers will appear after generation.</div></div>
             <div class="table-footer"><span id="table-count">No data to display</span><div class="table-pagination"><button class="icon-button previous" id="previous-page" aria-label="Previous year or input page" disabled><svg class="icon"><use href="#i-chevron"/></svg></button><span id="page-label">—</span><button class="icon-button" id="next-page" aria-label="Next year or input page" disabled><svg class="icon"><use href="#i-chevron"/></svg></button></div></div>
@@ -87,6 +94,7 @@
       <footer class="workspace-footer"><span>Interpolation API</span><span>Assumptions in. A traceable monthly view out.</span><a href="/docs" target="_blank" rel="noopener">API documentation<svg class="icon"><use href="#i-external"/></svg></a></footer>
     </main>
   </div>
+  <dialog id="scenario-editor" aria-labelledby="editor-title"><form id="scenario-form"><div class="editor-heading"><div><span class="editor-kicker">ALTERNATIVE ASSUMPTIONS</span><h2 id="editor-title">Edit yearly targets</h2></div><button class="button quiet" type="button" id="close-editor">Close</button></div><label class="scenario-name-field">Scenario name<input id="scenario-name" maxlength="64" required></label><p class="editor-description">The original CSV stays as your baseline. Enter numbers with or without %. Changes apply together after validation.</p><div id="editor-error" class="alert" role="alert" hidden></div><div class="editor-scroll"><table id="editor-table"><thead></thead><tbody></tbody></table></div><div class="editor-pagination"><span id="editor-page-label"></span><div><button class="button outline" type="button" id="editor-previous">Previous</button><button class="button outline" type="button" id="editor-next">Next</button></div></div><div class="editor-history" id="editor-history" hidden><label>Previous assumptions<select id="revision-select"></select></label><button class="text-button" type="button" id="restore-revision">Use these assumptions</button></div><div class="editor-footer"><span id="draft-change-count"></span><button class="button primary" type="submit" id="apply-assumptions">Apply assumptions</button></div></form></dialog>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>

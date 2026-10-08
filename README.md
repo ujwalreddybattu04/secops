@@ -19,8 +19,20 @@ The root page serves a responsive interface from `static/`, without a separate f
 - Inspect chart values with a pointer or arrow keys, toggle series, and show annual targets. Average markers sit at year midpoints as reference targets; they are not additional curve constraints. Exit markers sit in December.
 - Review monthly data by year, inspect source inputs, and download input, CSV, or PDF files.
 - Monthly table cells highlight values outside each series' yearly input range. The calculation engine verifies its constraints before returning results.
+- Keep the original input as a baseline; create a named alternative and edit its yearly targets. Generate both under one method and calculation fingerprint, then compare solid/dashed curves and monthly percentage-point differences.
+- Save a portable `.interpolation.json` project file with the original CSV, assumptions, current result snapshots, timestamps, engine fingerprints, and up to five previous alternative assumption revisions. Open it to validate the inputs and recalculate both scenarios with the current engine.
 
-`POST /preview` validates and sorts yearly data without invoking the optimizer. The calculations and existing conversion formats are unchanged. This first development workspace does not yet implement saved projects or team accounts.
+`POST /preview` validates and sorts yearly data without invoking the optimizer. The calculations and existing conversion formats are unchanged. `GET /engine` identifies the calculation code/dependency versions; successful `/convert` responses carry the same `X-Calculation-Engine` fingerprint. Scenario exports check that version against the displayed result.
+
+Projects remain in browser memory until downloaded. There is no automatic recovery after a page reload, shared server project storage, or team login. Project JSON contains readable analyst data; the original-input checksum detects changes, not authorship or permission. Imported historical output snapshots never bypass recalculation. See [SCENARIOS.md](SCENARIOS.md) for the workflow and limits.
+
+After starting the local server, optional real-browser scenario checks can be run separately:
+
+```sh
+python -m pip install playwright
+python -m playwright install chromium
+python tests/browser_scenarios.py --url http://127.0.0.1:8000/
+```
 
 See [REVIEW.md](REVIEW.md) for the measured analytics checks, service hardening, remaining release gaps, and next development order.
 

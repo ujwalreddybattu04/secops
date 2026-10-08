@@ -1,6 +1,6 @@
 # Analytics and release review — 8 October 2026
 
-The workspace is suitable for a development pilot with sample or approved test data. It is not yet ready for unrestricted internal company data: access control and reproducible saved runs are still missing. Passing numerical tests does not establish that estimated monthly profiles predict observed uptake.
+The workspace is suitable for a development pilot with sample or approved test data. It is not yet ready for unrestricted internal company data: access control and managed shared storage are still missing. Portable project files and scenario comparison have now been added, as described below. Passing numerical tests does not establish that estimated monthly profiles predict observed uptake.
 
 ## Changes made during this review
 
@@ -40,9 +40,17 @@ Desktop, tablet, and mobile browser checks passed for sample/upload input, Avera
 ## Next development order
 
 1. **Company identity and project permissions.** Confirm Chryselys' identity provider and data-hosting requirements, then protect both the workspace and all API routes. The public development service currently allows anonymous conversion. Browser headers are not an access-control substitute.
-2. **Reproducible project runs.** Save immutable source bytes, source hash, engine version, solver/settings version, method, timestamps, unrounded results, displayed exports, and review notes under the project permissions. The current workspace holds only browser-session state; downloads rerun calculation and there is no saved audit history.
-3. **Scenario comparison and approval.** Compare curves and annual targets between saved runs, show changed assumptions, and record who reviewed which run. Do not add simulated review status or imply approval from passing accuracy checks.
+2. **Managed project runs.** Build on the portable-project workflow by saving source bytes, source hash, engine version, solver/settings version, method, timestamps, unrounded results, displayed exports, and review notes under company project permissions. Portable files currently save displayed snapshots and inputs; they are recalculated on reopen and do not provide an authenticated audit history.
+3. **Scenario review and approval.** Build on the implemented baseline/alternative comparison with shared runs and a record of who reviewed which result. Do not add simulated review status or imply approval from passing accuracy checks.
 4. **Operational release preparation.** Resolve/pin tested dependency versions with an update process, add managed persistence/backup, ingress limits and rate controls, measure realistic concurrent/PDF loads, and select hosting against uptime, region, and recovery requirements. Current per-process capacity protection will not coordinate several workers or service instances.
 5. **Domain validation.** Ask analysts to compare monthly estimates with observed or accepted reference data. Separate interpolation assumptions from forecasting accuracy, and determine when monotonicity, launch dates, or first-month anchors are truly required. Conflicting assumptions should be explained rather than silently corrected.
 
 The broad CJK/Latin font support is tested, but every writing system, right-to-left layout, locale, and accessibility assistive technology has not been validated. International readiness requires those checks against the countries and analysts actually served.
+
+## Scenario comparison verification
+
+The scenario release preserves `smoothing.py` and `outputs.py` byte for byte against the preceding development commit. It adds engine fingerprints, a read-only baseline, a validated alternative editor, actual-value curve overlays, monthly percentage-point differences, scenario exports, and portable project files. Inputs are validated and results recalculated when opening a project. A changed calculation fingerprint prevents mixed-version comparisons and downloads.
+
+The Python suite passed **299 tests** locally. Real Chrome checks cover both methods, invalid/blank drafts, unchanged baseline data, actual assumption revision restoration, save/open through the file-input event, corrupted checksums, untrusted archived output snapshots, invalid/oversized project files, literal Unicode and `__proto__` headers, an engine change during comparison/export, extreme-magnitude failure, and permitted values greater than 100. Desktop, tablet, and mobile layouts were inspected. The public repository contains only code and synthetic fixtures.
+
+Project files contain readable source data and are stored only where the analyst downloads them. Checksums detect byte changes; they do not establish authorship or authorization. A page reload loses any work that has not been downloaded. This release does not add company login, server persistence, approval trails, or a forecast-accuracy guarantee.
