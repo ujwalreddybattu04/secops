@@ -4,6 +4,7 @@ from io import BytesIO
 from itertools import groupby
 from pathlib import Path
 from threading import Lock
+from textwrap import wrap
 from xml.sax.saxutils import escape
 
 import pandas as pd
@@ -101,7 +102,8 @@ def build_trend_chart(df: pd.DataFrame) -> Figure:
     magnitude = float(df.iloc[:, 2:].abs().max().max())
     chart_scale = magnitude if magnitude > 1e100 or 0 < magnitude < 1e-100 else 1.0
     for index in range(2, len(df.columns)):
-        axis.plot(x, (df.iloc[:, index] / chart_scale).tolist(), linewidth=1.8, label=str(df.columns[index]))
+        label = "\n".join(wrap(str(df.columns[index]), width=40, replace_whitespace=False, drop_whitespace=False))
+        axis.plot(x, (df.iloc[:, index] / chart_scale).tolist(), linewidth=1.8, label=label)
     # Thin tick labels on long series, without dropping any monthly data points.
     stride = max(1, (len(df) + 11) // 12)
     ticks = sorted(set(range(0, len(df), stride)) | {len(df) - 1})
@@ -117,7 +119,7 @@ def build_trend_chart(df: pd.DataFrame) -> Figure:
     axis.set_ylabel(label)
     axis.yaxis.set_major_formatter(PercentFormatter(xmax=100))
     axis.grid(True, alpha=0.25)
-    axis.legend()
+    axis.legend(ncol=min(3, max(1, (len(df.columns) - 2 + 5) // 6)), fontsize=8)
     axis.margins(x=0.01)
     # Set properties on the actual artists instead of mutating global rcParams.
     # This includes legend entries, labels, and both axes' tick/offset text.

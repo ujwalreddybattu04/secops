@@ -1,13 +1,15 @@
 """Yearly-to-monthly CSV API. Run with uvicorn main:app --reload."""
 
 import csv
+from contextlib import contextmanager
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from io import StringIO
 import math
 from pathlib import Path
+from threading import BoundedSemaphore
+import unicodedata
 
-import numpy as np
 import pandas as pd
 from smoothing import smooth_average, smooth_exit
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
@@ -31,6 +33,56 @@ class OutputFormat(str, Enum):
 app = FastAPI(title="Interpolation API")
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="assets")
+
+# Operational limits for the synchronous development service, not model bounds.
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_YEARS = 100
+MAX_VALUE_COLUMNS = 20
+MAX_MONTHLY_VALUES = 12_000
+MAX_HEADER_CHARACTERS = 200
+MAX_YEAR_IDENTIFIER = 2**53 - 1
+_conversion_capacity = BoundedSemaphore(1)
+
+
+class RequestLimitError(ValueError):
+    """Reject oversized work before allocating an optimization problem."""
+
+
+@app.middleware("http")
+async def response_protection(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if request.url.path in ("/convert", "/preview"):
+        response.headers["Cache-Control"] = "no-store"
+    if request.url.path == "/":
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; connect-src 'self'; object-src 'none'; "
+            "base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        )
+    return response
+
+
+@app.get("/health", include_in_schema=False)
+def health() -> dict:
+    """Lightweight process readiness; does not run or certify a calculation."""
+    return {"status": "ok"}
+
+
+@contextmanager
+def _conversion_slot():
+    if not _conversion_capacity.acquire(blocking=False):
+        raise HTTPException(
+            status_code=503,
+            detail="The calculation service is busy. Please retry in a few seconds.",
+            headers={"Retry-After": "3"},
+        )
+    try:
+        yield
+    finally:
+        _conversion_capacity.release()
 
 
 @app.get("/", include_in_schema=False)
@@ -70,6 +122,16 @@ def _validated_yearly_frame(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
         raise ValueError("Column names must not be empty.")
     if len(set(keys)) != len(keys):
         raise ValueError("Duplicate column names are not allowed (case-insensitive).")
+    for name in names:
+        if len(name) > MAX_HEADER_CHARACTERS:
+            raise ValueError(f"Column names must contain at most {MAX_HEADER_CHARACTERS} characters.")
+        if any(unicodedata.category(character) == "Cc" for character in name):
+            raise ValueError("Column names must not contain control characters or line breaks.")
+        if name.startswith(("=", "+", "-", "@")):
+            raise ValueError(
+                "Column names must not begin with =, +, -, or @; "
+                "rename formula-like headers before exporting to spreadsheets."
+            )
     names[keys.index("year")] = "year"
     data.columns = names
     if data.empty:
@@ -81,9 +143,16 @@ def _validated_yearly_frame(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
             number = Decimal(str(value).strip())
             if not number.is_finite() or number != number.to_integral_value():
                 raise ValueError
+            # Check the Decimal before int(): short exponent notation can encode
+            # enormous integers, and JSON/browser identifiers must stay exact.
+            if number.copy_abs() > MAX_YEAR_IDENTIFIER:
+                raise ValueError
             years.append(int(number))
         except (InvalidOperation, ValueError, OverflowError):
-            raise ValueError("'year' must contain non-empty integer values.") from None
+            raise ValueError(
+                "'year' must contain non-empty integer values within "
+                f"{-MAX_YEAR_IDENTIFIER} to {MAX_YEAR_IDENTIFIER}."
+            ) from None
     if len(set(years)) != len(years):
         raise ValueError("Duplicate years are not allowed.")
     ordered_years = sorted(years)
@@ -140,12 +209,25 @@ def _read_csv(content: bytes) -> pd.DataFrame:
     if "\x00" in text:
         raise ValueError("CSV contains invalid null characters; use a text CSV file.")
     try:
-        records = [row for row in csv.reader(StringIO(text, newline=""), strict=True) if row]
+        records = []
+        for row in csv.reader(StringIO(text, newline=""), strict=True):
+            if not row:
+                continue
+            if not records and len(row) > MAX_VALUE_COLUMNS + 1:
+                raise RequestLimitError(f"CSV supports at most {MAX_VALUE_COLUMNS} value columns per request.")
+            records.append(row)
+            if len(records) > MAX_YEARS + 1:
+                raise RequestLimitError(f"CSV supports at most {MAX_YEARS} yearly rows per request.")
         if not records:
             raise ValueError("CSV must contain at least one data row.")
         width = len(records[0])
         if any(len(row) != width for row in records[1:]):
             raise ValueError("Every CSV row must have the same number of fields as the header.")
+        if (len(records) - 1) * 12 * (width - 1) > MAX_MONTHLY_VALUES:
+            raise RequestLimitError(
+                f"Request would exceed {MAX_MONTHLY_VALUES:,} monthly values. "
+                "Submit fewer value columns while preserving the full year timeline."
+            )
         # Read the header as data to prevent pandas from renaming duplicate headers.
         frame = pd.read_csv(
             StringIO(text, newline=""), header=None, dtype=str, keep_default_na=False
@@ -156,27 +238,37 @@ def _read_csv(content: bytes) -> pd.DataFrame:
         raise ValueError(f"CSV could not be parsed: {exc}") from None
 
 
+def _uploaded_yearly_frame(file: UploadFile) -> pd.DataFrame:
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="File must have a .csv extension.")
+    try:
+        content = file.file.read(MAX_UPLOAD_BYTES + 1)
+    except OSError:
+        raise ValueError("Uploaded CSV could not be read.") from None
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise RequestLimitError("CSV files must be no larger than 10 MB.")
+    return _read_csv(content)
+
+
 CONVERSION_RESPONSES = {
     200: {
         "content": {"text/csv": {}, "application/json": {}, "application/pdf": {}},
         "description": "Monthly percentages as CSV, JSON, or PDF",
     },
     400: {"description": "Invalid CSV input"},
+    413: {"description": "File or calculation workload exceeds service limits"},
+    503: {"description": "Calculation capacity is occupied; retry after the indicated delay"},
 }
 
 
-@app.post("/preview")
+@app.post("/preview", responses={400: {"description": "Invalid CSV input"}, 413: {"description": "Service limits exceeded"}})
 def preview(file: UploadFile = File(...)) -> dict:
     """Validate yearly input for the workspace without running an optimizer."""
-    if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="File must have a .csv extension.")
-    limit = 10 * 1024 * 1024
     try:
-        content = file.file.read(limit + 1)
-        if len(content) > limit:
-            raise HTTPException(status_code=413, detail="The workspace supports CSV files up to 10 MB.")
-        data, columns = _validated_yearly_frame(_read_csv(content))
-    except (ValueError, OSError) as exc:
+        data, columns = _validated_yearly_frame(_uploaded_yearly_frame(file))
+    except RequestLimitError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"columns": columns, "rows": data.to_dict(orient="records")}
 
@@ -188,18 +280,15 @@ def convert(
     mode: Mode = Query(..., description="Smooth yearly means with a soft range penalty (average), or smooth December targets with a non-negative first month (exit)"),
     format: OutputFormat = Query(OutputFormat.csv, description="Response format"),
 ) -> Response:
-    if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="File must have a .csv extension.")
-    try:
+    with _conversion_slot():
         try:
-            content = file.file.read()
-        except OSError:
-            raise ValueError("Uploaded CSV could not be read.") from None
-        result = yearly_to_monthly(_read_csv(content), mode)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if format == OutputFormat.json:
-        return to_json_response(result)
-    if format == OutputFormat.pdf:
-        return to_pdf_response(result, mode.value)
-    return to_csv_response(result, mode.value)
+            result = yearly_to_monthly(_uploaded_yearly_frame(file), mode)
+        except RequestLimitError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if format == OutputFormat.json:
+            return to_json_response(result)
+        if format == OutputFormat.pdf:
+            return to_pdf_response(result, mode.value)
+        return to_csv_response(result, mode.value)

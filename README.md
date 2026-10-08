@@ -14,13 +14,15 @@ Analyst workspace: https://secops-4g26.onrender.com/
 
 The root page serves a responsive interface from `static/`, without a separate frontend build or third-party chart scripts. It opens with an explicitly labeled 13-year sample that can be replaced with an uploaded CSV.
 
-- Upload and preview yearly input, using the same validation as conversion. The workspace preview accepts files up to 10 MB.
+- Upload and preview yearly input, using the same validation as conversion. Both endpoints accept files up to 10 MB.
 - Choose Average or Exit and generate monthly values through the existing `/convert` endpoint.
 - Inspect chart values with a pointer or arrow keys, toggle series, and show annual targets. Average markers sit at year midpoints as reference targets; they are not additional curve constraints. Exit markers sit in December.
 - Review monthly data by year, inspect source inputs, and download input, CSV, or PDF files.
 - Inspect per-series range excursions and annual target checks. Browser checks use displayed values and rounding tolerance; the calculation engine still verifies unrounded constraints.
 
 `POST /preview` validates and sorts yearly data without invoking the optimizer. The calculations and existing conversion formats are unchanged. This first development workspace does not yet implement saved projects or team accounts.
+
+See [REVIEW.md](REVIEW.md) for the measured analytics checks, service hardening, remaining release gaps, and next development order.
 
 The team's existing service at https://yearly-to-monthly-api.onrender.com/docs remains the existing backend; this repository does not deploy to it.
 
@@ -115,8 +117,18 @@ Invalid input returns HTTP 400 with a clear JSON `detail`, regardless of output 
 - Empty, nonnumeric, NaN, or infinite values (including malformed percentage strings such as abc% or 6%%).
 - Non-integer years, duplicate years, or gaps between years after sorting.
 
+Year identifiers must fit the exact JSON/browser integer range, from -9,007,199,254,740,991 through 9,007,199,254,740,991. The Decimal range check runs before integer conversion, so compact exponents cannot allocate enormous year integers. Ordinary calendar and relative years retain their existing behaviour.
+
 UTF-8 (with or without a BOM) and Windows-1252 CSV files are supported, including Excel exports with Windows-encoded punctuation in column names. Uppercase .CSV extensions are supported. Finite absolute values and percentages are accepted without a 0-100 restriction, subject to each mode's calculation and accuracy constraints.
 Missing required request parameters or invalid mode/format values return HTTP 422.
+
+Both preview and conversion enforce operational limits: 10 MB per file, 100 yearly rows, 20 value columns, and 12,000 generated numeric values (years × 12 × value columns). Exceeding a limit returns HTTP 413 before optimizer construction. To reduce a wide request, submit fewer columns while retaining every year: splitting the timeline changes a global smoothing result. These limits protect this synchronous development service; they do not bound percentages or change either equation.
+
+Column names may contain at most 200 characters and no embedded control characters or line breaks. Headers beginning with `=`, `+`, `-`, or `@` are rejected with HTTP 400 to avoid exporting spreadsheet formulas. Rename those headers; Unicode and literal mathematical punctuation within ordinary labels remain supported. Long PDF legend labels wrap without changing table headers.
+
+One conversion, including PDF generation, runs at a time per server process. Overlapping requests receive HTTP 503 with `Retry-After: 3`, rather than starting additional optimizers. The browser honours short retry delays for up to two retries, with cancellation and its existing timeout. Capacity is released even after errors. Preview and health requests remain available. This is capacity protection, not authentication, rate limiting, or a distributed job queue.
+
+`GET /health` returns `{"status":"ok"}` when the process can serve requests. It does not run the optimizer or certify the quality of a particular curve. Conversion and preview responses use `Cache-Control: no-store`; the workspace also sets a content security policy and framing protection.
 
 ## Tests and code
 
@@ -140,7 +152,7 @@ The included render.yaml defines a free Python web service. The .python-version 
 
 - Build: `python -m pip install -r requirements.txt && python -m pytest -q`
 - Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-- Health check: `/docs`
+- Health check: `/health`
 
 For a new deployment, connect the repository through Render's **New > Blueprint** flow and deploy render.yaml. Keep main.py, outputs.py, requirements.txt, render.yaml, and .python-version at the repository root, with tests/ beside them.
 

@@ -26,9 +26,25 @@ function controls(){
   for(const id of ["export-csv","export-pdf"])$(id).disabled=state.busy || !state.rows.length;
   $("copy-table").disabled=state.busy || !(state.tab==="yearly" ? state.source : state.rows.length);
 }
+function retryDelay(milliseconds,signal){
+  return new Promise((resolve,reject)=>{
+    if(signal.aborted){reject(new DOMException("Request cancelled","AbortError"));return;}
+    const cancelled=()=>{clearTimeout(timer);reject(new DOMException("Request cancelled","AbortError"));};
+    const timer=setTimeout(()=>{signal.removeEventListener("abort",cancelled);resolve();},milliseconds);
+    signal.addEventListener("abort",cancelled,{once:true});
+  });
+}
 async function post(path,file,signal){
   const form=new FormData(); form.append("file",file,file.name);
-  const response=await fetch(path,{method:"POST",body:form,signal});
+  let response;
+  for(let attempt=0;attempt<3;attempt++){
+    response=await fetch(path,{method:"POST",body:form,signal});
+    const delay=Number(response.headers.get("Retry-After"));
+    if(response.status!==503 || attempt===2 || !Number.isFinite(delay) || delay<=0 || delay>5)break;
+    await response.body?.cancel();
+    $("process-status").textContent="Calculation capacity is busy. Retrying shortly…";
+    await retryDelay(delay*1000,signal);
+  }
   if(!response.ok){let message=`The service could not complete this request (${response.status}). Please try again.`; try{const body=await response.json(); if(typeof body.detail==="string")message=body.detail; else if(Array.isArray(body.detail))message=body.detail.map(item=>item.msg).join(" ");}catch{} throw new Error(message);}
   return response;
 }
@@ -197,5 +213,5 @@ $("chart").addEventListener("click",()=>{if(state.inspected===null)return;state.
 $("chart").addEventListener("keydown",event=>{if(!state.rows.length)return;if(["ArrowLeft","ArrowRight","Home","End"].includes(event.key)){event.preventDefault();const index=event.key==="Home" ? 0 : event.key==="End" ? state.rows.length-1 : (state.inspected??0)+(event.key==="ArrowRight" ? 1 : -1);inspect(index);state.yearIndex=Math.floor(state.inspected/12);state.tab="monthly";renderTable();}else if(event.key==="Escape")hideInspection();});
 $("chart").addEventListener("blur",hideInspection);
 let resizeTimer;window.addEventListener("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{hideInspection();renderChart();},120);});
-fetch("/openapi.json").then(response=>{if(!response.ok)throw new Error();$("connection").className="connection connected";$("connection").replaceChildren(node("span",undefined,"status-dot"),document.createTextNode("API connected"));}).catch(()=>{$("connection").className="connection disconnected";$("connection").replaceChildren(node("span",undefined,"status-dot"),document.createTextNode("Connection unavailable"));});
+fetch("/health").then(response=>{if(!response.ok)throw new Error();$("connection").className="connection connected";$("connection").replaceChildren(node("span",undefined,"status-dot"),document.createTextNode("API connected"));}).catch(()=>{$("connection").className="connection disconnected";$("connection").replaceChildren(node("span",undefined,"status-dot"),document.createTextNode("Connection unavailable"));});
 render();sample();
