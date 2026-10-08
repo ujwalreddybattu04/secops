@@ -6,6 +6,8 @@ This repository is an independent development copy of the yearly-to-monthly API 
 
 Deploy this repository as a separate service named `secops` using `render.yaml`. Use the new service's URL for development and testing.
 
+Development API: https://secops-4g26.onrender.com/docs
+
 The team's existing service at https://yearly-to-monthly-api.onrender.com/docs remains the existing backend; this repository does not deploy to it.
 
 Do not include local virtual environments, logs, credentials, or analyst documents in commits. The bundled font and its license are included because PDF generation requires them.
@@ -119,7 +121,7 @@ Tests cover the existing validation cases, both calculation modes, multiple colu
 
 ## Render deployment
 
-The private development repository is https://github.com/ujwalreddybattu04/secops.
+The public development repository is https://github.com/ujwalreddybattu04/secops.
 The included render.yaml defines a free Python web service. The .python-version file selects Python 3.12.
 
 - Build: `python -m pip install -r requirements.txt && python -m pytest -q`
