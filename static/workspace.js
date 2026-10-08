@@ -204,7 +204,6 @@ $("year-select").addEventListener("change",event=>{state.yearIndex=Number(event.
 $("previous-page").addEventListener("click",()=>movePage(-1));$("next-page").addEventListener("click",()=>movePage(1));$("copy-table").addEventListener("click",copyTable);
 $("show-targets").addEventListener("change",()=>{hideInspection();renderChart();});
 $("review-details").addEventListener("click",showReview);
-for(const button of document.querySelectorAll("[data-guide]"))button.addEventListener("click",()=>$("guide-dialog").showModal());
 for(const button of document.querySelectorAll("[data-close-dialog]"))button.addEventListener("click",()=>button.closest("dialog").close());
 for(const dialog of document.querySelectorAll("dialog"))dialog.addEventListener("click",event=>{if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left || event.clientX>rect.right || event.clientY<rect.top || event.clientY>rect.bottom)dialog.close();}});
 $("chart").addEventListener("pointermove",event=>{if(!chartGeometry)return;const rect=event.currentTarget.getBoundingClientRect(),scale=Math.min(rect.width/chartGeometry.width,rect.height/chartGeometry.height),offset=(rect.width-chartGeometry.width*scale)/2,x=(event.clientX-rect.left-offset)/scale;inspect(Math.round((x-chartGeometry.left)/chartGeometry.plotWidth*(state.rows.length-1)));});
