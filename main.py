@@ -26,7 +26,7 @@ class OutputFormat(str, Enum):
     pdf = "pdf"
 
 
-app = FastAPI(title="Yearly-to-Monthly Percentage Converter")
+app = FastAPI(title="Interpolation API")
 
 
 def yearly_to_monthly(df: pd.DataFrame, mode: Mode | str) -> pd.DataFrame:

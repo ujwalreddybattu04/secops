@@ -1,4 +1,4 @@
-# Secops — Forecasting Development Backend
+# Interpolation API
 
 FastAPI converts each yearly percentage row into 12 monthly rows and returns CSV, JSON, or a PDF with a trend chart and table.
 
