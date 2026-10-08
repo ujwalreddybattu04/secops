@@ -5,12 +5,14 @@ from decimal import Decimal, InvalidOperation
 from enum import Enum
 from io import StringIO
 import math
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from smoothing import smooth_average, smooth_exit
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import Response, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from outputs import to_csv_response, to_json_response, to_pdf_response
 
@@ -27,6 +29,13 @@ class OutputFormat(str, Enum):
 
 
 app = FastAPI(title="Interpolation API")
+STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="assets")
+
+
+@app.get("/", include_in_schema=False)
+def workspace() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 def yearly_to_monthly(df: pd.DataFrame, mode: Mode | str) -> pd.DataFrame:
@@ -36,6 +45,20 @@ def yearly_to_monthly(df: pd.DataFrame, mode: Mode | str) -> pd.DataFrame:
     case-insensitive. Raises ValueError for invalid input.
     """
     mode = Mode(mode)
+    data, value_columns = _validated_yearly_frame(df)
+    targets = data[value_columns].to_numpy(dtype=float)
+    smoother = smooth_average if mode == Mode.average else smooth_exit
+    corrected = smoother(targets, value_columns)
+    rows = [
+        [year, month, *corrected[index * 12 + month - 1].tolist()]
+        for index, year in enumerate(data["year"].tolist())
+        for month in range(1, 13)
+    ]
+    return _checked_monthly_frame(rows, value_columns)
+
+
+def _validated_yearly_frame(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """Share the existing input validation with the analyst's input preview."""
     data = df.copy(deep=True)
     names = [str(column).strip() for column in data.columns]
     keys = [name.casefold() for name in names]
@@ -87,15 +110,7 @@ def yearly_to_monthly(df: pd.DataFrame, mode: Mode | str) -> pd.DataFrame:
 
     data = data.sort_values("year").reset_index(drop=True)
 
-    targets = data[value_columns].to_numpy(dtype=float)
-    smoother = smooth_average if mode == Mode.average else smooth_exit
-    corrected = smoother(targets, value_columns)
-    rows = [
-        [year, month, *corrected[index * 12 + month - 1].tolist()]
-        for index, year in enumerate(data["year"].tolist())
-        for month in range(1, 13)
-    ]
-    return _checked_monthly_frame(rows, value_columns)
+    return data, value_columns
 
 
 def _checked_monthly_frame(rows: list, value_columns: list[str]) -> pd.DataFrame:
@@ -148,6 +163,22 @@ CONVERSION_RESPONSES = {
     },
     400: {"description": "Invalid CSV input"},
 }
+
+
+@app.post("/preview")
+def preview(file: UploadFile = File(...)) -> dict:
+    """Validate yearly input for the workspace without running an optimizer."""
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="File must have a .csv extension.")
+    limit = 10 * 1024 * 1024
+    try:
+        content = file.file.read(limit + 1)
+        if len(content) > limit:
+            raise HTTPException(status_code=413, detail="The workspace supports CSV files up to 10 MB.")
+        data, columns = _validated_yearly_frame(_read_csv(content))
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"columns": columns, "rows": data.to_dict(orient="records")}
 
 
 @app.get("/convert", response_class=Response, responses=CONVERSION_RESPONSES)

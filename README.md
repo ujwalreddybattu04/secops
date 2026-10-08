@@ -8,6 +8,20 @@ Deploy this repository as a separate service named `secops` using `render.yaml`.
 
 Development API: https://secops-4g26.onrender.com/docs
 
+Analyst workspace: https://secops-4g26.onrender.com/
+
+## Analyst workspace
+
+The root page serves a responsive interface from `static/`, without a separate frontend build or third-party chart scripts. It opens with an explicitly labeled 13-year sample that can be replaced with an uploaded CSV.
+
+- Upload and preview yearly input, using the same validation as conversion. The workspace preview accepts files up to 10 MB.
+- Choose Average or Exit and generate monthly values through the existing `/convert` endpoint.
+- Inspect chart values with a pointer or arrow keys, toggle series, and show annual targets. Average markers sit at year midpoints as reference targets; they are not additional curve constraints. Exit markers sit in December.
+- Review monthly data by year, inspect source inputs, and download input, CSV, or PDF files.
+- Inspect per-series range excursions and annual target checks. Browser checks use displayed values and rounding tolerance; the calculation engine still verifies unrounded constraints.
+
+`POST /preview` validates and sorts yearly data without invoking the optimizer. The calculations and existing conversion formats are unchanged. This first development workspace does not yet implement saved projects or team accounts.
+
 The team's existing service at https://yearly-to-monthly-api.onrender.com/docs remains the existing backend; this repository does not deploy to it.
 
 Do not include local virtual environments, logs, credentials, or analyst documents in commits. The bundled font and its license are included because PDF generation requires them.
@@ -22,7 +36,7 @@ uvicorn main:app --reload
 ```
 
 On macOS/Linux, activate with `source .venv/bin/activate`.
-Open http://127.0.0.1:8000/docs and use **POST /convert**.
+Open http://127.0.0.1:8000/ for the analyst workspace, or http://127.0.0.1:8000/docs and use **POST /convert**.
 Upload the CSV and select **mode** and **format**.
 
 ## Input and calculations
