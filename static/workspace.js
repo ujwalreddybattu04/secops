@@ -116,7 +116,64 @@ function renderLegend(){
   });
 }
 let chartGeometry=null;
+let renderedChartRows=null;
+const motionPreference=window.matchMedia("(prefers-reduced-motion: reduce)");
+const chartMotion={animations:[],observer:null,pending:false,restore:null,onVisibility:null};
+function finishChartMotion(){
+  chartMotion.observer?.disconnect();chartMotion.observer=null;
+  if(chartMotion.onVisibility)document.removeEventListener("visibilitychange",chartMotion.onVisibility);
+  chartMotion.onVisibility=null;
+  for(const animation of chartMotion.animations)animation.cancel();
+  chartMotion.animations=[];chartMotion.pending=false;
+  chartMotion.restore?.();chartMotion.restore=null;
+  $("chart").dataset.motion=state.rows.length ? "complete" : "empty";
+}
+function revealChart(axes,axisLines,reveal,width,animate,elapsed=0){
+  const chart=$("chart");
+  if(!animate || motionPreference.matches || typeof reveal.animate!=="function" || typeof window.IntersectionObserver!=="function")return;
+  const axisDuration=220,curveDelay=240,curveDuration=1100;
+  axes.style.opacity="0";reveal.style.width="0px";
+  chartMotion.pending=true;chart.dataset.motion="pending";
+  chartMotion.restore=()=>{axes.style.opacity="";reveal.style.width="";};
+  function inView(){const rect=chart.getBoundingClientRect(),visibleHeight=Math.min(rect.bottom,window.innerHeight)-Math.max(rect.top,0);return visibleHeight>=Math.min(rect.height*.2,window.innerHeight*.5) && rect.right>0 && rect.left<window.innerWidth;}
+  function start(){
+    if(!chartMotion.pending || document.hidden || !inView())return;
+    chartMotion.observer?.disconnect();chartMotion.observer=null;
+    chartMotion.pending=false;chart.dataset.motion="drawing";
+    // The underlying SVG is already complete. Animation only reveals it;
+    // finishing/cancelling always restores the actual, unmodified coordinates.
+    axes.style.opacity="";reveal.style.width="";
+    chartMotion.animations.push(axes.animate([{opacity:0},{opacity:1}],{duration:axisDuration,easing:"ease-out"}));
+    for(const line of axisLines){const length=line.getTotalLength();chartMotion.animations.push(line.animate([
+      {strokeDasharray:String(length),strokeDashoffset:String(length)},
+      {strokeDasharray:String(length),strokeDashoffset:"0"}
+    ],{duration:axisDuration,easing:"ease-out"}));}
+    const drawing=reveal.animate([{width:"0px"},{width:`${width}px`}],{
+      duration:curveDuration,delay:curveDelay,fill:"backwards",easing:"cubic-bezier(.4,0,.2,1)"
+    });
+    chartMotion.animations.push(drawing);
+    if(elapsed>0)for(const animation of chartMotion.animations)animation.currentTime=elapsed;
+    drawing.onfinish=()=>{if(chartMotion.animations.includes(drawing))finishChartMotion();};
+  }
+  chartMotion.onVisibility=()=>{
+    if(chartMotion.pending){start();return;}
+    for(const animation of chartMotion.animations){
+      if(document.hidden && animation.playState==="running")animation.pause();
+      else if(!document.hidden && animation.playState==="paused")animation.play();
+    }
+  };
+  document.addEventListener("visibilitychange",chartMotion.onVisibility);
+  chartMotion.observer=new IntersectionObserver(start,{threshold:[0,.05,.1,.2,.5,1]});chartMotion.observer.observe(chart);
+  // On narrow screens, do not spend the animation while the chart is below
+  // the upload form. It starts when the analyst scrolls it into view.
+  start();
+}
+motionPreference.addEventListener("change",()=>{if(motionPreference.matches)finishChartMotion();});
 function renderChart(){
+  const sameResult=state.rows===renderedChartRows;
+  const elapsed=sameResult ? chartMotion.animations.at(-1)?.currentTime || 0 : 0;
+  const animate=!sameResult || chartMotion.pending || chartMotion.animations.length>0;
+  finishChartMotion();renderedChartRows=state.rows.length ? state.rows : null;
   const chart=$("chart");chart.replaceChildren();const title=svgNode("title",{id:"chart-title"});title.textContent="Monthly curve";const description=svgNode("desc",{id:"chart-description"});description.textContent="Monthly estimates and yearly target markers. Use left and right arrow keys to inspect months, or see the values in the table below.";chart.append(title,description);
   const width=Math.max(360,Math.min(800,chart.clientWidth)),height=window.innerWidth<480 ? 275 : 310,left=58,right=25,top=25,bottom=42,plotWidth=width-left-right,plotHeight=height-top-bottom;
   chart.setAttribute("viewBox",`0 0 ${width} ${height}`);chart.style.setProperty("--chart-font-size",window.innerWidth<480 ? "12px" : "11px");
@@ -134,25 +191,33 @@ function renderChart(){
   const x=(position)=>left+position/(state.rows.length-1)*plotWidth;
   const y=(value)=>top+(high-value)/(high-low)*plotHeight;
   chartGeometry={width,height,left,right,top,bottom,plotWidth,plotHeight,x,y};
-  const unit=svgNode("text",{x:left,y:12});unit.textContent="Percentage";chart.append(unit);
+  const axes=svgNode("g",{"data-chart-layer":"axes"});
+  const axisLines=[svgNode("line",{x1:left,x2:left,y1:height-bottom,y2:top,stroke:"#d8e1ec","stroke-width":1}),svgNode("line",{x1:left,x2:width-right,y1:height-bottom,y2:height-bottom,stroke:"#d8e1ec","stroke-width":1})];
+  axes.append(...axisLines);chart.append(axes);
+  const definitions=svgNode("defs"),clip=svgNode("clipPath",{id:"curve-reveal",clipPathUnits:"userSpaceOnUse"});
+  const reveal=svgNode("rect",{x:left-5,y:0,width:plotWidth+10,height,"data-chart-reveal":""});clip.append(reveal);definitions.append(clip);chart.append(definitions);
+  const curves=svgNode("g",{"data-chart-layer":"curves","clip-path":"url(#curve-reveal)"});chart.append(curves);
+  const unit=svgNode("text",{x:left,y:12});unit.textContent="Percentage";axes.append(unit);
   for(let value=Math.ceil(low/step)*step,count=0;value<=high+step*0.01 && count<20;value+=step,count++){
-    const line=svgNode("line",{x1:left,x2:width-right,y1:y(value),y2:y(value),stroke:Math.abs(value)<step*1e-6 ? "#d8e1ec" : "#eef1f5","stroke-width":1});chart.append(line);
-    const label=svgNode("text",{x:left-11,y:y(value)+3,"text-anchor":"end"});label.textContent=Math.abs(value)>=1e6 ? `${value.toExponential(1)}%` : percent(value,Math.abs(step)<1 ? 2 : 0);chart.append(label);
+    const line=svgNode("line",{x1:left,x2:width-right,y1:y(value),y2:y(value),stroke:Math.abs(value)<step*1e-6 ? "#d8e1ec" : "#eef1f5","stroke-width":1});axes.append(line);
+    const label=svgNode("text",{x:left-11,y:y(value)+3,"text-anchor":"end"});label.textContent=Math.abs(value)>=1e6 ? `${value.toExponential(1)}%` : percent(value,Math.abs(step)<1 ? 2 : 0);axes.append(label);
   }
   const tickCount=window.innerWidth<480 ? 4 : 7;const ticks=new Set();
   for(let tick=0;tick<tickCount;tick++)ticks.add(Math.round(tick*(state.rows.length-1)/(tickCount-1)));
-  for(const index of ticks){const label=svgNode("text",{x:x(index),y:height-18,"text-anchor":index===0 ? "start" : index===state.rows.length-1 ? "end" : "middle"});label.textContent=monthName(state.rows[index],true);chart.append(label);}
+  for(const index of ticks){const label=svgNode("text",{x:x(index),y:height-18,"text-anchor":index===0 ? "start" : index===state.rows.length-1 ? "end" : "middle"});label.textContent=monthName(state.rows[index],true);axes.append(label);}
   for(const column of columns){
     const color=colors[state.source.columns.indexOf(column)%colors.length];
-    if(comparison && $("compare-baseline").checked)chart.append(svgNode("polyline",{points:comparison.rows.map((row,index)=>`${x(index)},${y(numeric(row[column]))}`).join(" "),fill:"none",stroke:color,"stroke-width":1.5,"stroke-dasharray":"5 4","data-scenario":"baseline"}));
-    const line=svgNode("polyline",{points:state.rows.map((row,index)=>`${x(index)},${y(numeric(row[column]))}`).join(" "),fill:"none",stroke:color,"stroke-width":2,"stroke-linejoin":"round","stroke-linecap":"round"});chart.append(line);
-    if($("show-targets").checked)state.source.rows.forEach((row,index)=>{const point=svgNode("circle",{cx:x(index*12+(state.resultMode==="exit" ? 11 : 5.5)),cy:y(row[column]),r:3.2,fill:"white",stroke:color,"stroke-width":1.5});const pointTitle=svgNode("title");pointTitle.textContent=`${column} · ${yearName(row.year)} target: ${percent(row[column],6)}`;point.append(pointTitle);chart.append(point);});
+    if(comparison && $("compare-baseline").checked)curves.append(svgNode("polyline",{points:comparison.rows.map((row,index)=>`${x(index)},${y(numeric(row[column]))}`).join(" "),fill:"none",stroke:color,"stroke-width":1.5,"stroke-dasharray":"5 4","data-scenario":"baseline"}));
+    const line=svgNode("polyline",{points:state.rows.map((row,index)=>`${x(index)},${y(numeric(row[column]))}`).join(" "),fill:"none",stroke:color,"stroke-width":2,"stroke-linejoin":"round","stroke-linecap":"round"});curves.append(line);
+    if($("show-targets").checked)state.source.rows.forEach((row,index)=>{const point=svgNode("circle",{cx:x(index*12+(state.resultMode==="exit" ? 11 : 5.5)),cy:y(row[column]),r:3.2,fill:"white",stroke:color,"stroke-width":1.5});const pointTitle=svgNode("title");pointTitle.textContent=`${column} · ${yearName(row.year)} target: ${percent(row[column],6)}`;point.append(pointTitle);curves.append(point);});
   }
   chart.append(svgNode("line",{id:"crosshair",x1:left,x2:left,y1:top,y2:height-bottom,stroke:"#aab9ce","stroke-width":1,"stroke-dasharray":"3 3",visibility:"hidden"}));
   const focus=svgNode("g",{id:"focus-points"});chart.append(focus);
+  revealChart(axes,axisLines,reveal,plotWidth+10,animate,elapsed);
 }
 function inspect(index){
   if(!chartGeometry || !state.rows.length)return;
+  finishChartMotion();
   index=Math.max(0,Math.min(state.rows.length-1,index));state.inspected=index;
   const row=state.rows[index],geometry=chartGeometry,crosshair=$("crosshair"),points=$("focus-points"),tooltip=$("chart-tooltip");
   crosshair.setAttribute("x1",geometry.x(index));crosshair.setAttribute("x2",geometry.x(index));crosshair.setAttribute("visibility","visible");points.replaceChildren();tooltip.replaceChildren(node("strong",monthName(row)));

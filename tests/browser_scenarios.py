@@ -137,7 +137,7 @@ class PlaywrightBrowser:
         if method == 'Page.navigate':
             self.page.goto(params['url'], wait_until='domcontentloaded')
         else:
-            raise ValueError(method)
+            return self.cdp.send(method, params)
 
     def evaluate(self, script):
         result = self.cdp.send('Runtime.evaluate', {'expression': script,

@@ -17,6 +17,7 @@ The root page serves a responsive interface from `static/`, without a separate f
 - Upload and preview yearly input, using the same validation as conversion. Both endpoints accept files up to 10 MB.
 - Choose Average or Exit and generate monthly values through the existing `/convert` endpoint.
 - Inspect chart values with a pointer or arrow keys, toggle series, and show annual targets. Average markers sit at year midpoints as reference targets; they are not additional curve constraints. Exit markers sit in December.
+- New results and scenario switches draw the axes first, then reveal curves and target markers together from left to right in about 1.3 seconds. Charts below the viewport wait until visible. Reduced-motion preferences show the complete chart immediately, and pointer/keyboard inspection completes any ongoing reveal. Animation does not alter calculated values or exports.
 - Review monthly data by year, inspect source inputs, and download input, CSV, or PDF files.
 - Monthly table cells highlight values outside each series' yearly input range. The calculation engine verifies its constraints before returning results.
 - Keep the original input as a baseline; create a named alternative and edit its yearly targets. Generate both under one method and calculation fingerprint, then compare solid/dashed curves and monthly percentage-point differences.
@@ -32,6 +33,7 @@ After starting the local server, optional real-browser scenario checks can be ru
 python -m pip install playwright
 python -m playwright install chromium
 python tests/browser_scenarios.py --url http://127.0.0.1:8000/
+python tests/browser_chart_motion.py --url http://127.0.0.1:8000/
 ```
 
 See [REVIEW.md](REVIEW.md) for the measured analytics checks, service hardening, remaining release gaps, and next development order.
