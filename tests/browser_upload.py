@@ -1,4 +1,4 @@
-"""Verify the screen-only upload flow without sending selected data to an API."""
+"""Verify selection stays local until the analyst explicitly generates a curve."""
 import argparse
 import json
 
@@ -14,7 +14,7 @@ def click(browser, selector):
 def check_upload(browser,url):
     browser.command('Page.navigate',{'url':url})
     browser.wait('location.href.startsWith('+json.dumps(url)+') && typeof UploadScreen!=="undefined"')
-    assert browser.evaluate('UploadScreen.selection()===null && document.getElementById("file-chip").hidden && typeof Workspace==="undefined" && typeof Review==="undefined" && !document.getElementById("chart")')
+    assert browser.evaluate('UploadScreen.selection()===null && document.getElementById("file-chip").hidden && typeof Workspace==="undefined" && typeof Review==="undefined" && document.getElementById("result-panel").hidden && document.getElementById("generate").disabled')
     assert browser.evaluate('document.fonts.check("14px Inter") || document.fonts.status==="loading"')
     browser.evaluate('window.calls=[];window.originalFetch=window.fetch;window.fetch=(...args)=>{window.calls.push(args[0]);return originalFetch(...args)};')
     # A real file-input change, including Unicode and markup-like literal names.

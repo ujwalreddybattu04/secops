@@ -8,6 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 18C11 18 10 5 21 5M3 12C10 12 15 17 21 9' stroke='%23242424' stroke-width='1.7' fill='none'/%3E%3C/svg%3E">
   <link rel="preload" href="/assets/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/upload.css">
+  <script src="/assets/chart.js" defer></script>
   <script src="/assets/upload.js" defer></script>
 </head>
 <body>
@@ -43,11 +44,23 @@
         <div class="upload-composer" id="upload-composer" role="group" aria-label="Upload a yearly CSV" aria-describedby="file-help">
           <button class="composer-prompt" id="choose-file-prompt" data-file-picker>Drag and drop a yearly CSV here</button>
           <div class="file-chip" id="file-chip" hidden><span class="file-chip-icon"><svg class="icon"><use href="#i-file"/></svg></span><div><strong id="file-name"></strong><span id="file-size"></span></div><button class="icon-button" id="remove-file" aria-label="Remove selected file"><svg class="icon"><use href="#i-close"/></svg></button></div>
-          <div class="composer-toolbar"><button class="icon-button add-file" data-file-picker aria-label="Add a CSV file" title="Choose a CSV"><svg class="icon"><use href="#i-plus"/></svg></button><span class="file-help" id="file-help">CSV · up to 10 MB</span><div class="composer-actions"><label class="method-picker"><span class="visually-hidden">Calculation method</span><select id="method-selector"><option value="average">Average</option><option value="exit">Exit</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></label><button class="upload-button" data-file-picker aria-label="Choose a CSV to upload" title="Choose a CSV"><svg class="icon"><use href="#i-upload"/></svg></button></div></div>
+          <div class="composer-toolbar"><button class="icon-button add-file" data-file-picker aria-label="Add a CSV file" title="Choose a CSV"><svg class="icon"><use href="#i-plus"/></svg></button><span class="file-help" id="file-help">CSV · up to 10 MB</span><div class="composer-actions"><label class="method-picker"><span class="visually-hidden">Calculation method</span><select id="method-selector"><option value="average">Average</option><option value="exit">Exit</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></label><button class="upload-button" id="generate" aria-label="Generate monthly curve" title="Generate monthly curve" disabled><svg class="icon"><use href="#i-upload"/></svg><span class="spinner" aria-hidden="true" hidden></span></button></div></div>
         </div>
         <p class="upload-error" id="upload-error" role="alert" hidden></p>
         <p class="selection-status" id="selection-status" role="status" aria-live="polite"></p>
+        <button class="cancel-button" id="cancel-request" hidden>Cancel</button>
         <aside class="intro-card" id="intro-card" aria-label="CSV format"><span class="intro-mark" aria-hidden="true"><svg class="icon"><use href="#i-curve"/></svg></span><div><h2>Start with your yearly data</h2><p>A year column, followed by one or more value columns.</p></div><button class="dismiss-button" id="dismiss-intro">Dismiss</button></aside>
+      </section>
+      <section class="result-panel" id="result-panel" aria-labelledby="result-title" hidden>
+        <header class="result-heading"><div><h2 id="result-title" tabindex="-1">Monthly curve</h2><p id="result-meta"></p></div><div class="downloads" aria-label="Download monthly results"><button id="download-csv" class="download-button">Download CSV</button><button id="download-pdf" class="download-button">Download PDF</button></div></header>
+        <p id="export-status" class="export-status" role="status" aria-live="polite"></p>
+        <div class="series-legend" id="series-legend" aria-label="Value series"></div>
+        <div class="chart-container" id="chart-container"><svg id="chart" role="img" aria-labelledby="chart-title chart-description" tabindex="0"><title id="chart-title">Monthly curve</title><desc id="chart-description">Monthly values from your uploaded CSV. Use the left and right arrow keys to inspect each month. The values are also available in the table below.</desc></svg></div>
+        <div id="chart-readout" class="chart-readout"><p>Move across the curve to inspect a month.</p></div>
+        <div id="chart-announcement" class="visually-hidden" role="status" aria-live="polite"></div>
+        <div class="table-heading"><h3 id="table-title">Monthly values</h3><label class="year-picker">Year <select id="table-year" aria-label="Year for monthly values"></select></label></div>
+        <div class="table-scroll" tabindex="0" role="region" aria-labelledby="table-title"><table id="monthly-table"><caption class="visually-hidden">Monthly values for the selected year</caption><thead></thead><tbody></tbody></table></div>
+        <p class="rounding-note">Values are displayed to 2 decimal places.</p>
       </section>
     </main>
   </div>
