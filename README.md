@@ -205,20 +205,34 @@ Exit reuses the same magnitude-ratio guard and scaling. Normalized December and 
 
 ## Curve review: trust and explainability
 
-Generate a result, then select **Run review** in the panel beneath the chart.
-Review is explicit so ordinary CSV/JSON/PDF conversion pays no additional solve
-cost. It does not change either smoothing algorithm.
+The workspace separates tasks into five views:
 
-- **Shape & drivers** flags sharp yearly changes and turning points in yearly
+1. **Input** — upload a CSV, inspect the validated yearly targets, and choose
+   Average or Exit. A short 6% example explains each method's meaning.
+2. **Results** — explore the monthly graph and table, then download CSV or PDF.
+3. **Compare** — calculate Average and Exit together from the same input.
+4. **Explain** — inspect changes, read plain-language calculation explanations,
+   and optionally open the one-target influence experiment.
+5. **Record** — check annual constraints and download calculation settings and
+   validation results.
+
+Only one view is visible at a time. Moving between views does not edit input or
+start a calculation. After generating a result, the workspace opens Results.
+Comparison, explanation and record analysis share one explicitly requested
+review; use the action button in any of those views to prepare it. Ordinary
+CSV/JSON/PDF conversion pays no additional review solve cost. Neither smoothing
+algorithm is changed by the organization of these views.
+
+- **Explain** flags sharp yearly changes and turning points in yearly
   targets and raw monthly values. Select a flag to inspect its month on the main
   graph. Each series has its own findings and explanations of its annual
   constraint, curvature objective, first-month minimum and optional soft range.
-- **Compare methods** runs Average and Exit on identical input under one engine
+- **Compare** runs Average and Exit on identical input under one engine
   version. It shows both full-timeline curves and a selectable year's monthly
   values and differences. This is separate from baseline/alternative comparison.
   An unavailable comparison method is explained without discarding the selected
   method's valid result.
-- **Calculation record** includes finite-value, raw annual-constraint and
+- **Record** includes finite-value, raw annual-constraint and
   first-month checks, per-year errors and tolerances, display-rounding errors,
   solver configuration, package versions, detection rules and engine fingerprint.
   It can be downloaded as JSON and is included in **Save project** after review.
@@ -245,7 +259,8 @@ forecast confidence or a guarantee of continuous mathematical differentiability.
 Records include total event counts and up to 200 events per kind per series.
 
 Project schema version 1 remains backward compatible. Optional review snapshots,
-influence experiments and workspace display settings are saved. On reopen,
+influence experiments and workspace display settings, including the selected
+view, are saved. On reopen,
 monthly results and previously requested reviews are recalculated; imported
 pass/fail flags and output snapshots never bypass verification. Historical
 influence snapshots remain in the downloaded archive but are not presented as
@@ -253,9 +268,12 @@ current measurements on reopening. These are portable local files, not server
 storage, user accounts, shared permissions or an approval audit trail.
 
 The workspace uses self-hosted Inter Variable with its bundled license; see
-`static/fonts/README.md`. It has keyboard-operated review tabs, literal-text
+`static/fonts/README.md`. It has keyboard-operated workflow tabs, literal-text
 rendering, responsive tables and the existing reduced-motion chart behavior.
 
 Backend tests: `python -m pytest -q`. Optional real-browser review regression:
 `python tests/browser_curve_review.py --url http://127.0.0.1:8000/` after installing
 Playwright and its Chromium browser as described in `tests/browser_scenarios.py`.
+The organization regression is `python tests/browser_organization.py --url
+http://127.0.0.1:8000/`; it also checks visible pointer interactions, navigation
+without extra solves, input paging, saved views, and method changes.

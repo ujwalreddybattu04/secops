@@ -88,3 +88,25 @@ These reviews explain the implemented equations and measure model responses.
 They do not infer real-world causes, validate business assumptions, give forecast
 confidence, imply analyst approval, or promise monotonicity/hard percentage bounds.
 Company identity, shared storage and authenticated review history remain later work.
+
+## Workspace organization — 9 October 2026
+
+The UI presents one task at a time through Input, Results, Compare, Explain and
+Record. Input now has its own paged, read-only source preview and simple method
+examples. Results holds the monthly chart and values; technical details and the
+optional influence experiment use disclosure controls in Explain. Project and
+original/alternative context remain available above all five views. Generation
+opens Results and transfers keyboard focus to its tab. Project reopening restores
+the saved view after recalculating its results and requested checks.
+
+The Python suite remains **332 passing tests**. A new real-pointer Chrome check
+covers all five views, zero API calculations on navigation, source paging,
+comparison and influence controls, flag-to-graph inspection, keyboard order,
+generation focus and saved-view reopening. Every view was inspected at 1440,
+900, 390 and 320 px without page overflow or browser exceptions. Existing
+scenario and chart-motion browser checks also pass. This verifies browser
+behavior and layout; it does not substitute for usability sessions with analysts.
+
+`main.py`, `smoothing.py`, `outputs.py` and `curve_review.py` are byte-identical
+to development commit `a87ec0c5d188d4ab993929a69fb7c4d7394587f4`. The original
+team service is outside this change.

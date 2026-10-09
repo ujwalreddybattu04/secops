@@ -27,6 +27,7 @@ function controls(){
   $("copy-table").disabled=state.busy || !(state.tab==="yearly" ? state.source : state.rows.length);
   window.Scenarios?.controls();
   window.Review?.controls();
+  window.Workspace?.controls();
 }
 function retryDelay(milliseconds,signal){
   return new Promise((resolve,reject)=>{
@@ -52,7 +53,7 @@ async function post(path,file,signal){
 }
 function clearResult(){state.rows=[]; state.resultMode=null; state.engineId=null; state.review=null;state.influence=null; state.stats=[]; state.yearIndex=0; state.inspected=null; $("chart-tooltip").hidden=true;}
 function handleFailure(error,revision){if(revision!==state.revision)return; showError(error.name==="AbortError" ? "The request took too long. Please try again; a sleeping development service may need time to start." : error.message);}
-async function generateResult(revision){
+async function generateResult(revision,focusResult=false){
   await window.Scenarios?.prepare(state.controller.signal);
   $("process-status").textContent="Generating the monthly profile…";
   const response=await post(`/convert?mode=${state.mode}&format=json`,state.file,state.controller.signal);
@@ -65,12 +66,14 @@ async function generateResult(revision){
   window.Scenarios?.capture();
   state.stats=calculateRanges(); render();
   $("updated-at").textContent=`Updated ${new Intl.DateTimeFormat(undefined,{hour:"2-digit",minute:"2-digit"}).format(new Date())}`;
+  window.Workspace?.selectedResult(focusResult);
 }
 async function loadFile(file,sample=false,autoGenerate=false){
   if(!file)return;
   if(!file.name.toLowerCase().endsWith(".csv")){showError("Choose a .csv file. Excel workbooks must first be saved as CSV.");return;}
   if(file.size>10*1024*1024){showError("The workspace supports CSV files up to 10 MB.");return;}
   if(!window.Scenarios?.mayReplace())return;
+  window.Workspace?.show("input");
   const revision=operation("Checking the yearly input…");
   const timer=setTimeout(()=>state.revision===revision && state.controller.abort(),90000);
   state.file=file; state.sample=sample; state.source=null; state.sourcePage=0; clearResult(); render();
@@ -86,7 +89,7 @@ async function loadFile(file,sample=false,autoGenerate=false){
     if(autoGenerate)await generateResult(revision);
   }catch(error){handleFailure(error,revision);}finally{clearTimeout(timer);finish(revision);}
 }
-async function generate(){if(!state.source || state.busy)return;const revision=operation("Generating the monthly profile…"); const timer=setTimeout(()=>state.revision===revision && state.controller.abort(),90000); clearResult();render();try{await generateResult(revision);}catch(error){handleFailure(error,revision);}finally{clearTimeout(timer);finish(revision);}}
+async function generate(){if(!state.source || state.busy)return;const revision=operation("Generating the monthly profile…"); const timer=setTimeout(()=>state.revision===revision && state.controller.abort(),90000); clearResult();render();try{await generateResult(revision,true);}catch(error){handleFailure(error,revision);}finally{clearTimeout(timer);finish(revision);}}
 async function sample(){if(state.busy)return;const startingRevision=state.revision;try{showError("");const response=await fetch("/assets/adoption-sample.csv");if(!response.ok)throw new Error("The sample file could not be loaded.");const blob=await response.blob();if(state.busy || state.revision!==startingRevision)return;await loadFile(new File([blob],"adoption-sample.csv",{type:"text/csv"}),true,true);}catch(error){if(state.revision===startingRevision)showError(error.message);}}
 function calculateRanges(){
   return state.source.columns.map(column=>{
@@ -107,6 +110,7 @@ function render(){
   window.Scenarios?.render();
   renderLegend();renderChart();renderTable();controls();
   window.Review?.render();
+  window.Workspace?.render();
 }
 function renderLegend(){
   const legend=$("series-legend");legend.replaceChildren();
@@ -266,7 +270,7 @@ for(const input of document.querySelectorAll('input[name="mode"]'))input.addEven
 $("generate").addEventListener("click",generate);
 $("export-csv").addEventListener("click",()=>exportResult("csv"));$("export-pdf").addEventListener("click",()=>exportResult("pdf"));
 $("download-input").addEventListener("click",()=>{if(state.file)saveBlob(state.file,state.file.name);});
-$("view-input").addEventListener("click",()=>{switchTab("yearly");$("data-content").scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",block:"nearest"});});
+$("view-input").addEventListener("click",()=>{if(window.Workspace){Workspace.show("input");$("input-preview").scrollIntoView({behavior:motionPreference.matches ? "instant" : "smooth",block:"nearest"});}else{switchTab("yearly");$("data-content").scrollIntoView({behavior:motionPreference.matches ? "instant" : "smooth",block:"nearest"});}});
 for(const tab of ["monthly","yearly"]){$(`${tab}-tab`).addEventListener("click",()=>switchTab(tab));$(`${tab}-tab`).addEventListener("keydown",event=>{if(["ArrowLeft","ArrowRight","Home","End"].includes(event.key)){event.preventDefault();const next=event.key==="Home" ? "monthly" : event.key==="End" ? "yearly" : tab==="monthly" ? "yearly" : "monthly";switchTab(next);$(`${next}-tab`).focus();}});}
 $("year-select").addEventListener("change",event=>{state.yearIndex=Number(event.target.value);state.inspected=null;hideInspection();renderTable();});
 $("previous-page").addEventListener("click",()=>movePage(-1));$("next-page").addEventListener("click",()=>movePage(1));$("copy-table").addEventListener("click",copyTable);

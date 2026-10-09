@@ -8,12 +8,14 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f3c63'/%3E%3Cpath d='M7 24C14 24 14 8 25 8M7 17C14 17 18 22 25 13' stroke='white' stroke-width='2' fill='none'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/assets/workspace.css">
   <link rel="stylesheet" href="/assets/review.css">
+  <link rel="stylesheet" href="/assets/organization.css">
   <link rel="preload" href="/assets/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
   <script src="/assets/workspace.js" defer></script>
   <script src="/assets/scenarios.js" defer></script>
   <script src="/assets/review.js" defer></script>
+  <script src="/assets/organization.js" defer></script>
 </head>
-<body>
+<body class="organized-workspace">
   <a class="skip-link" href="#main">Skip to workspace</a>
   <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
     <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 4v16h16M7 15l4-5 4 2 5-7"/></symbol>
@@ -28,78 +30,64 @@
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 3h7v7M21 3L10 14M11 3H3v18h18v-8"/></symbol>
   </svg>
 
-  <aside class="rail" aria-label="Workspace navigation">
+  <header class="application-header">
     <a class="brand" href="/" aria-label="Interpolation home">
       <span class="brand-mark"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 25C15 25 14 7 26 7M6 17C14 17 18 22 26 12"/></svg></span>
       <span><strong>Interpolation</strong><small>Analyst workspace</small></span>
     </a>
-    <div class="nav-caption">WORKSPACE</div>
-    <nav>
-      <a class="nav-item active" href="#main" aria-current="page"><svg class="icon"><use href="#i-chart"/></svg>Curve analysis</a>
-      <a class="nav-item" href="/docs" target="_blank" rel="noopener"><svg class="icon"><use href="#i-external"/></svg>API reference</a>
-    </nav>
-    <div class="rail-note"><span class="note-rule"></span><strong>From targets to timelines.</strong><p>A focused workspace for reviewing monthly curves and the assumptions behind them.</p></div>
-    <div class="rail-bottom"><span class="environment-dot"></span>Development environment<span class="rail-company">Built for Chryselys analysts</span></div>
-  </aside>
-
+    <div class="application-tools"><span class="connection" id="connection"><span class="status-dot"></span>Connecting</span><a class="api-link" href="/docs" target="_blank" rel="noopener">API reference<svg class="icon"><use href="#i-external"/></svg></a></div>
+  </header>
   <div class="app-shell">
-    <header class="topbar"><span class="breadcrumbs">Forecasting<span>/</span><strong>Curve analysis</strong></span><span class="connection" id="connection"><span class="status-dot"></span>Connecting</span></header>
     <main id="main">
-      <div class="page-heading">
-        <div><h1>Curve workspace</h1><p>Compare monthly profiles from different yearly assumptions.</p></div>
-        <div class="project-actions"><button class="button outline" id="open-project">Open project</button><button class="button outline" id="save-project" disabled>Save project</button><input id="project-file" type="file" accept=".json,application/json" hidden></div>
-      </div>
+      <div class="page-heading"><div><span class="workspace-eyebrow">ANALYST WORKSPACE</span><h1>Curve workspace</h1><p>Turn yearly inputs into monthly values, then explore what they mean.</p></div><div class="project-actions"><button class="button outline" id="open-project">Open project</button><button class="button outline" id="save-project" disabled>Save project</button><input id="project-file" type="file" accept=".json,application/json" hidden></div></div>
       <div class="alert" id="error" role="alert" hidden></div>
-      <div class="workspace-layout">
+      <div id="analysis" aria-busy="false">
+          <section class="scenario-panel" aria-label="Scenario selection">
+            <div class="scenario-heading"><div><label for="project-name">PROJECT</label><input id="project-name" maxlength="80" value="Untitled analysis" aria-label="Project name"></div><span class="session-note">Session only · Save a project file to keep your work</span></div>
+            <div class="scenario-row"><div class="scenario-tabs" role="tablist" aria-label="Active scenario"><button id="baseline-scenario" role="tab" aria-selected="true" class="scenario-tab active"><strong>Original</strong><span>Original input</span></button><button id="alternative-scenario" role="tab" aria-selected="false" class="scenario-tab" hidden><strong id="alternative-label">Alternative</strong><span id="alternative-description">No changes applied</span></button></div><button class="button outline" id="create-alternative" disabled>Test different targets</button><button class="button outline" id="edit-alternative" hidden>Edit yearly targets</button></div>
+          </section>
+        <nav class="workflow-navigation" aria-label="Analysis workflow"><div class="workflow-tabs" role="tablist" aria-label="Workspace views">
+          <button id="input-workflow-tab" role="tab" aria-selected="true" aria-controls="input-workflow" class="workflow-tab active"><span class="workflow-number">01</span><span><strong>Input</strong><small>File and method</small></span></button>
+          <button id="results-workflow-tab" role="tab" aria-selected="false" aria-controls="results-workflow" tabindex="-1" class="workflow-tab" disabled><span class="workflow-number">02</span><span><strong>Results</strong><small>Graph and monthly values</small></span></button>
+          <button id="methods-review-tab" role="tab" aria-selected="false" aria-controls="methods-review" tabindex="-1" class="workflow-tab" disabled><span class="workflow-number">03</span><span><strong>Compare</strong><small>Average versus Exit</small></span></button>
+          <button id="signals-review-tab" role="tab" aria-selected="false" aria-controls="signals-review" tabindex="-1" class="workflow-tab" disabled><span class="workflow-number">04</span><span><strong>Explain</strong><small>Changes and input effects</small></span></button>
+          <button id="record-review-tab" role="tab" aria-selected="false" aria-controls="record-review" tabindex="-1" class="workflow-tab" disabled><span class="workflow-number">05</span><span><strong>Record</strong><small>Checks and saved settings</small></span></button>
+        </div></nav>
+        <div class="workflow-context"><span id="workflow-context-copy">Start with a yearly CSV.</span><span id="workflow-origin" class="workflow-origin" hidden>Example data</span><button class="text-button" id="change-input" hidden>Change file or method</button></div>
+        <section id="input-workflow" role="tabpanel" aria-labelledby="input-workflow-tab">
+          <div class="view-introduction"><div><span class="view-step">STEP 01</span><h2>Start with your yearly inputs</h2><p>Upload your file, inspect the numbers, and choose how the yearly values should be interpreted.</p></div></div>
         <aside class="configuration" aria-label="Input and calculation settings">
           <section class="config-section source-section">
-            <div class="section-title"><span class="step-number">01</span><h2>Source data</h2></div>
+            <div class="section-title"><span class="step-number">01</span><h2>Upload yearly inputs</h2></div>
             <input id="file-input" type="file" accept=".csv,text/csv" class="visually-hidden" aria-label="Upload yearly CSV">
             <button class="dropzone" id="dropzone" aria-describedby="file-help"><span class="upload-symbol"><svg class="icon"><use href="#i-upload"/></svg></span><strong>Upload a yearly CSV</strong><span>Choose a file or drop it here</span><small>CSV · Up to 10 MB</small></button>
             <p class="field-hint" id="file-help">A <code>year</code> column and one or more numeric value columns. Values may include %. Up to 100 years, 20 series, and 12,000 generated values per request.</p>
             <div class="source-file" id="source-file" hidden><svg class="icon"><use href="#i-file"/></svg><div><strong id="file-name"></strong><span id="file-description"></span></div><span class="sample-tag" id="sample-tag" hidden>Sample</span></div>
-            <div class="source-links" id="source-links" hidden><button class="text-button" id="view-input">View yearly inputs</button><button class="text-button" id="download-input">Download input</button></div>
+            <div class="source-links" id="source-links" hidden><button class="text-button" id="view-input">Inspect inputs below</button><button class="text-button" id="download-input">Download input</button></div>
           </section>
           <section class="config-section">
-            <div class="section-title"><span class="step-number">02</span><h2>Calculation method</h2></div>
+            <div class="section-title"><span class="step-number">02</span><h2>Choose what your yearly value means</h2></div>
             <fieldset class="mode-options"><legend class="visually-hidden">Calculation method</legend>
-              <label class="mode-option"><input type="radio" name="mode" value="average" checked><span><strong>Average</strong><small>Preserve each year's mean</small></span><svg class="icon"><use href="#i-check"/></svg></label>
-              <label class="mode-option"><input type="radio" name="mode" value="exit"><span><strong>Exit</strong><small>Match each December target</small></span><svg class="icon"><use href="#i-check"/></svg></label>
+              <label class="mode-option"><input type="radio" name="mode" value="average" checked><span><strong>Average</strong><small>The average across all 12 months</small></span><svg class="icon"><use href="#i-check"/></svg></label>
+              <label class="mode-option"><input type="radio" name="mode" value="exit"><span><strong>Exit</strong><small>The value reached in December</small></span><svg class="icon"><use href="#i-check"/></svg></label>
             </fieldset>
-            <p class="method-explanation" id="method-explanation">Monthly values vary smoothly. Their yearly mean matches your input before display rounding.</p>
+            <div class="method-example"><strong id="method-example-title">Example: a yearly value of 6%</strong><p id="method-example-copy">Months may be above or below 6%. Together, their average is 6%.</p></div><p class="method-explanation" id="method-explanation">Monthly values vary smoothly. Their yearly mean matches your input before display rounding.</p>
             <button class="button primary generate" id="generate" disabled><span>Generate monthly curve</span><svg class="icon"><use href="#i-arrow"/></svg></button>
             <p class="process-status" id="process-status" role="status" aria-live="polite">Upload a file to get started.</p>
           </section>
           <section class="config-section context-section"><svg class="icon"><use href="#i-info"/></svg><div><strong>Estimated monthly values</strong><p>The curve distributes your yearly assumptions. It does not represent observed monthly data.</p></div></section>
         </aside>
 
-        <div class="analysis-column" id="analysis" aria-busy="false">
-          <section class="scenario-panel" aria-label="Scenario selection">
-            <div class="scenario-heading"><div><label for="project-name">PROJECT</label><input id="project-name" maxlength="80" value="Untitled analysis" aria-label="Project name"></div><span class="session-note">Session only · Save a project file to keep your work</span></div>
-            <div class="scenario-row"><div class="scenario-tabs" role="tablist" aria-label="Active scenario"><button id="baseline-scenario" role="tab" aria-selected="true" class="scenario-tab active"><strong>Baseline</strong><span>Original input</span></button><button id="alternative-scenario" role="tab" aria-selected="false" class="scenario-tab" hidden><strong id="alternative-label">Alternative</strong><span id="alternative-description">No changes applied</span></button></div><button class="button outline" id="create-alternative" disabled>Create alternative</button><button class="button outline" id="edit-alternative" hidden>Edit assumptions</button></div>
-          </section>
+          <section class="input-preview" id="input-preview" aria-labelledby="input-preview-title"><div class="input-preview-heading"><div><h2 id="input-preview-title">Yearly numbers from your file</h2><p id="input-preview-description">Your validated input will appear here before calculation.</p></div><div class="input-preview-pagination"><button class="icon-button" id="input-previous" aria-label="Previous input page" disabled>‹</button><span id="input-page-label">—</span><button class="icon-button" id="input-next" aria-label="Next input page" disabled>›</button></div></div><div class="input-preview-scroll"><table id="input-preview-table" hidden><thead></thead><tbody></tbody></table><p id="input-preview-empty">Choose a CSV to inspect its yearly values.</p></div></section>
+        </section>
+        <section id="results-workflow" role="tabpanel" aria-labelledby="results-workflow-tab" hidden>
+          <div class="view-introduction"><div><span class="view-step">STEP 02</span><h2>Your monthly result</h2><p>Inspect the graph, browse the numbers, or download the result. Compare shows the other calculation method.</p></div></div>
           <section class="chart-panel" aria-labelledby="profile-title">
             <div class="panel-heading"><div><h2 id="profile-title">Monthly profile</h2><p id="profile-subtitle">Upload a file or explore the sample dataset.</p></div><div class="export-actions"><button class="button outline compact" id="export-csv" disabled><svg class="icon"><use href="#i-download"/></svg>CSV</button><button class="button outline compact" id="export-pdf" disabled><svg class="icon"><use href="#i-download"/></svg>PDF</button></div></div>
             <div class="chart-toolbar"><div class="series-legend" id="series-legend" aria-label="Visible series"></div><label class="target-toggle"><input type="checkbox" id="show-targets" checked>Yearly targets</label></div>
-            <div class="comparison-key" id="comparison-key" hidden><label><input id="compare-baseline" type="checkbox" checked>Compare with baseline</label><span><i class="solid-key"></i>Alternative <i class="dashed-key"></i>Baseline</span></div>
+            <div class="comparison-key" id="comparison-key" hidden><label><input id="compare-baseline" type="checkbox" checked>Compare with original</label><span><i class="solid-key"></i>Alternative <i class="dashed-key"></i>Original</span></div>
             <div class="chart-stage" id="chart-stage"><svg id="chart" viewBox="0 0 800 310" role="img" aria-labelledby="chart-title chart-description" tabindex="0"><title id="chart-title">Monthly curve</title><desc id="chart-description">Monthly estimates with yearly target markers. Use the arrow keys to inspect monthly values.</desc></svg><div class="chart-empty" id="chart-empty"><svg class="icon"><use href="#i-chart"/></svg><strong>Your monthly profile will appear here</strong><span>Generate a curve to review its shape and values.</span></div><div class="chart-tooltip" id="chart-tooltip" hidden></div></div>
             <div class="chart-footer"><span><span class="target-key"></span><span id="target-caption">Markers show yearly mean targets at mid-year.</span></span><span id="updated-at">No result generated</span></div>
-          </section>
-          <section class="curve-review" id="curve-review" aria-labelledby="curve-review-title">
-            <div class="review-heading"><div><span class="review-kicker">CURVE INTELLIGENCE</span><h2 id="curve-review-title">Understand the shape.</h2><p>Review changes, compare methods, and trace the calculation.</p></div><button class="button outline" id="run-review" disabled>Run review<svg class="icon"><use href="#i-arrow"/></svg></button></div>
-            <p class="review-status" id="review-status" role="status" aria-live="polite">Generate a curve to start its review.</p>
-            <div class="review-error" id="review-error" role="alert" hidden></div>
-            <div id="review-content" hidden>
-              <div class="review-navigation"><div class="review-tabs" role="tablist" aria-label="Curve review"><button id="signals-review-tab" class="review-tab active" role="tab" aria-selected="true" aria-controls="signals-review">Shape &amp; drivers</button><button id="methods-review-tab" class="review-tab" role="tab" aria-selected="false" aria-controls="methods-review" tabindex="-1">Compare methods</button><button id="record-review-tab" class="review-tab" role="tab" aria-selected="false" aria-controls="record-review" tabindex="-1">Calculation record</button></div><label class="review-series-label">Series<select id="review-series"></select></label></div>
-              <div class="review-body">
-                <section id="signals-review" role="tabpanel" aria-labelledby="signals-review-tab">
-                  <div class="review-grid"><div><h3>Changes worth inspecting</h3><p class="review-caption">Detected from your yearly targets and the unrounded monthly result.</p><div id="review-signals" class="signal-list"></div><details class="review-definition"><summary>How changes are detected</summary><p>A sharp yearly change must be at least 25% of that series' input range and twice its median non-zero yearly change. A turning point is a rise followed by a fall, or the reverse. Flat plateaus are grouped; tiny numerical changes are ignored. These are descriptive flags, not statistical tests.</p></details></div><div class="curve-drivers"><h3>What shapes this curve</h3><div id="review-drivers"></div></div></div>
-                  <form id="influence-form" class="influence-form"><div><h3>Test one target's influence</h3><p class="review-caption">Change one yearly target temporarily and measure the model's response. Data-based range preferences and first-month floors are recalculated. Your project stays unchanged.</p></div><div class="influence-controls"><label>Year<select id="influence-year"></select></label><label>Target change (pp)<input id="influence-change" type="text" inputmode="decimal" value="1" maxlength="100" required></label><button class="button outline" type="submit" id="run-influence">Measure influence</button></div><p id="influence-result" class="influence-result" role="status" aria-live="polite" hidden></p></form>
-                </section>
-                <section id="methods-review" role="tabpanel" aria-labelledby="methods-review-tab" hidden><div class="method-review-heading"><div><h3>Same inputs. Two different questions.</h3><p class="review-caption">Average preserves the yearly mean. Exit pins December. Neither method is ranked as better.</p></div><label>Year<select id="method-review-year"></select></label></div><div class="method-review-key"><span><i class="method-average-key"></i>Average</span><span><i class="method-exit-key"></i>Exit</span></div><svg id="method-review-chart" role="img" aria-label="Average and Exit monthly comparison"></svg><p class="review-caption" id="method-chart-note"></p><div class="review-table-scroll"><table id="method-review-table"><thead></thead><tbody></tbody></table></div><p class="review-footnote">Comparison numbers display two decimal places. Exact constraint checks are in the calculation record.</p></section>
-                <section id="record-review" role="tabpanel" aria-labelledby="record-review-tab" hidden><div class="record-heading"><div><h3>A record you can reproduce.</h3><p class="review-caption">Inputs, engine version, actual solver settings and raw-value checks travel with your project.</p></div><button class="button outline" id="download-review"><svg class="icon"><use href="#i-download"/></svg>Download record</button></div><dl id="review-record" class="review-record"></dl><div class="review-table-scroll"><table id="review-validation-table"><thead></thead><tbody></tbody></table></div><details class="review-definition"><summary>Solver settings &amp; review limits</summary><pre id="review-settings"></pre><ul id="review-limits"></ul></details><p class="review-footnote">Save project includes this review. Reopening recalculates its checks; archived results are not treated as proof.</p></section>
-              </div>
-            </div>
           </section>
           <section class="data-panel" aria-labelledby="data-title">
             <div class="data-heading"><div class="table-tabs" role="tablist" aria-label="Data view"><button id="monthly-tab" role="tab" aria-selected="true" aria-controls="data-content" class="table-tab active">Monthly values</button><button id="yearly-tab" role="tab" aria-selected="false" aria-controls="data-content" class="table-tab">Yearly inputs</button><button id="difference-tab" role="tab" aria-selected="false" aria-controls="data-content" class="table-tab" hidden>Difference</button></div><div class="table-controls"><label id="difference-series-control" hidden>Series<select id="difference-series" aria-label="Series to compare"></select></label><label class="year-control" id="year-control">Year<select id="year-select" aria-label="Year to inspect"></select></label><button class="icon-button" id="copy-table" title="Copy visible table" aria-label="Copy visible table" disabled><svg class="icon"><use href="#i-copy"/></svg></button></div></div>
@@ -108,9 +96,25 @@
             <div class="table-footer"><span id="table-count">No data to display</span><div class="table-pagination"><button class="icon-button previous" id="previous-page" aria-label="Previous year or input page" disabled><svg class="icon"><use href="#i-chevron"/></svg></button><span id="page-label">—</span><button class="icon-button" id="next-page" aria-label="Next year or input page" disabled><svg class="icon"><use href="#i-chevron"/></svg></button></div></div>
           </section>
           <p class="rounding-note" id="rounding-note">Results display two decimal places.</p>
-        </div>
+          <div class="result-next-actions"><span>Ready to explore this result?</span><button class="button outline" id="open-method-comparison">Compare Average and Exit<svg class="icon"><use href="#i-arrow"/></svg></button><button class="text-button" id="open-curve-explanation">Explain the curve</button></div>
+        </section>
+          <section class="curve-review" id="curve-review" aria-labelledby="curve-review-title">
+            <div class="review-heading"><div><span class="review-kicker" id="review-page-kicker">EXPLAIN YOUR RESULT</span><h2 id="curve-review-title">Understand your curve</h2><p id="review-page-description">Find changes in the curve and understand how your inputs shape it.</p></div><button class="button outline" id="run-review" disabled>Run review<svg class="icon"><use href="#i-arrow"/></svg></button></div>
+            <p class="review-status" id="review-status" role="status" aria-live="polite">Generate a curve to start its review.</p>
+            <div class="review-error" id="review-error" role="alert" hidden></div>
+            <div id="review-placeholder" class="review-placeholder"><p id="review-placeholder-copy">Prepare the analysis to explore this result.</p><div class="review-purpose-cards" id="review-purpose-cards"></div></div><div id="review-content" hidden><div class="review-selection"><label class="review-series-label">Data column<select id="review-series"></select></label><span id="review-selection-note"></span></div>
+              <div class="review-body">
+                <section id="signals-review" role="tabpanel" aria-labelledby="signals-review-tab">
+                  <div class="review-grid"><div><h3>Where the curve changes</h3><p class="review-caption">Detected from your yearly targets and the unrounded monthly result.</p><div id="review-signals" class="signal-list"></div><details class="review-definition"><summary>How changes are detected</summary><p>A sharp yearly change must be at least 25% of that series' input range and twice its median non-zero yearly change. A turning point is a rise followed by a fall, or the reverse. Flat plateaus are grouped; tiny numerical changes are ignored. These are descriptive flags, not statistical tests.</p></details></div><div class="curve-drivers"><h3>Why these monthly values?</h3><div id="plain-curve-explanation" class="plain-explanation"></div><details class="review-definition"><summary>Calculation details</summary><div id="review-drivers"></div></details></div></div>
+                  <details class="target-experiment" id="target-experiment"><summary><span>Explore changing one yearly target</span><small>Optional experiment · your input stays unchanged</small></summary><form id="influence-form" class="influence-form"><div><h3>What changes if you edit one target?</h3><p class="review-caption">Change one yearly target temporarily and measure the model's response. Data-based range preferences and first-month floors are recalculated. Your project stays unchanged.</p></div><div class="influence-controls"><label>Year<select id="influence-year"></select></label><label>Change (percentage points)<input id="influence-change" type="text" inputmode="decimal" value="1" maxlength="100" required></label><button class="button outline" type="submit" id="run-influence">Test this change</button></div><p id="influence-result" class="influence-result" role="status" aria-live="polite" hidden></p></form></details>
+                </section>
+                <section id="methods-review" role="tabpanel" aria-labelledby="methods-review-tab" hidden><div class="method-review-heading"><div><h3>What changes between Average and Exit?</h3><p class="review-caption">Average matches the yearly average. Exit matches December. Both curves use the same input file.</p></div><label>Year<select id="method-review-year"></select></label></div><div class="method-review-key"><span><i class="method-average-key"></i>Average</span><span><i class="method-exit-key"></i>Exit</span></div><svg id="method-review-chart" role="img" aria-label="Average and Exit monthly comparison"></svg><p class="review-caption" id="method-chart-note"></p><div class="review-table-scroll"><table id="method-review-table"><thead></thead><tbody></tbody></table></div><p class="review-footnote">Comparison numbers display two decimal places. Exact constraint checks are in the calculation record.</p></section>
+                <section id="record-review" role="tabpanel" aria-labelledby="record-review-tab" hidden><div class="record-heading"><div><h3>Keep a traceable calculation record</h3><p class="review-caption">Inputs, engine version, actual solver settings and raw-value checks travel with your project.</p></div><button class="button outline" id="download-review"><svg class="icon"><use href="#i-download"/></svg>Download record</button></div><dl id="review-record" class="review-record"></dl><div class="review-table-scroll"><table id="review-validation-table"><thead></thead><tbody></tbody></table></div><details class="review-definition"><summary>Solver settings &amp; review limits</summary><pre id="review-settings"></pre><ul id="review-limits"></ul></details><p class="review-footnote">Save project includes this review. Reopening recalculates its checks; archived results are not treated as proof.</p></section>
+              </div>
+            </div>
+          </section>
       </div>
-      <footer class="workspace-footer"><span>Interpolation API</span><span>Assumptions in. A traceable monthly view out.</span><a href="/docs" target="_blank" rel="noopener">API documentation<svg class="icon"><use href="#i-external"/></svg></a></footer>
+      <footer class="workspace-footer"><span>Interpolation · Development workspace</span><span>Save project downloads a file you can reopen.</span><a href="/docs" target="_blank" rel="noopener">API documentation<svg class="icon"><use href="#i-external"/></svg></a></footer>
     </main>
   </div>
   <dialog id="scenario-editor" aria-labelledby="editor-title"><form id="scenario-form"><div class="editor-heading"><div><span class="editor-kicker">ALTERNATIVE ASSUMPTIONS</span><h2 id="editor-title">Edit yearly targets</h2></div><button class="button quiet" type="button" id="close-editor">Close</button></div><label class="scenario-name-field">Scenario name<input id="scenario-name" maxlength="64" required></label><p class="editor-description">The original CSV stays as your baseline. Enter numbers with or without %. Changes apply together after validation.</p><div id="editor-error" class="alert" role="alert" hidden></div><div class="editor-scroll"><table id="editor-table"><thead></thead><tbody></tbody></table></div><div class="editor-pagination"><span id="editor-page-label"></span><div><button class="button outline" type="button" id="editor-previous">Previous</button><button class="button outline" type="button" id="editor-next">Next</button></div></div><div class="editor-history" id="editor-history" hidden><label>Previous assumptions<select id="revision-select"></select></label><button class="text-button" type="button" id="restore-revision">Use these assumptions</button></div><div class="editor-footer"><span id="draft-change-count"></span><button class="button primary" type="submit" id="apply-assumptions">Apply assumptions</button></div></form></dialog>

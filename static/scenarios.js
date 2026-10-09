@@ -37,7 +37,7 @@ const Scenarios = (() => {
   }
   async function prepare(signal){
     if(active!=="alternative")return;
-    $("process-status").textContent="Calculating the baseline for a consistent comparison…";
+    $("process-status").textContent="Calculating the original inputs for a consistent comparison…";
     const result=await calculate(baseline,state.mode,signal);
     if(window.Review?.accepts(baseline.review,baseline.source,result.rows,state.mode,result.engineId)){
       result.review=baseline.review;result.influence=baseline.influence;
@@ -52,6 +52,7 @@ const Scenarios = (() => {
     active=which;const item=current();
     state.file=item.file;state.source=clone(item.source);state.sample=item.sample;state.rows=clone(item.rows);state.resultMode=item.mode;state.engineId=item.engineId;state.review=item.review || null;state.influence=item.influence || null;
     state.yearIndex=0;state.sourcePage=0;state.tab="monthly";state.inspected=null;state.stats=calculateRanges();hideInspection();window.render();
+    window.Workspace?.selectedResult();
     $("process-status").textContent=state.rows.length ? "Curve ready to review." : "Assumptions ready. Generate to calculate this scenario.";
   }
   function controls(){
@@ -74,7 +75,7 @@ const Scenarios = (() => {
     }
     const ready=Boolean(comparison());$("comparison-key").hidden=!ready;$("difference-tab").hidden=!ready;
     if(!ready && state.tab==="difference")state.tab="monthly";
-    $("profile-title").textContent=active==="baseline" ? "Baseline monthly profile" : `${alternative.name} · monthly profile`;
+    $("profile-title").textContent=active==="baseline" ? "Original monthly curve" : `${alternative.name} · monthly curve`;
     const time=current()?.generatedAt;
     if(state.rows.length && time)$("updated-at").textContent=`Updated ${new Intl.DateTimeFormat(undefined,{hour:'2-digit',minute:'2-digit'}).format(new Date(time))}`;
   }
@@ -101,7 +102,7 @@ const Scenarios = (() => {
     });
     $("editor-page-label").textContent=`Years ${editorPage*12+1}–${Math.min(editorPage*12+12,draft.rows.length)} of ${draft.rows.length}`;
     $("editor-previous").disabled=editorPage===0;$("editor-next").disabled=(editorPage+1)*12>=draft.rows.length;
-    $("draft-change-count").textContent="Baseline stays unchanged";
+    $("draft-change-count").textContent="Original input stays unchanged";
   }
   async function apply(event){
     event.preventDefault();if(state.busy || !draft)return;
@@ -146,7 +147,7 @@ const Scenarios = (() => {
     const series=$("difference-series");series.replaceChildren();state.source.columns.forEach(column=>{const option=node('option',column);option.value=column;option.selected=column===(differenceColumn || state.source.columns[0]);series.append(option);});
     const select=$("year-select");select.replaceChildren();state.source.rows.forEach((row,index)=>{const option=node('option',String(row.year));option.value=index;option.selected=index===state.yearIndex;select.append(option);});
     const table=$("data-table"),head=table.querySelector('thead'),body=table.querySelector('tbody');head.replaceChildren();body.replaceChildren();
-    const header=node('tr');['Year','Month','Baseline',alternative.name,'Change (pp)'].forEach(label=>{const th=node('th',label);th.scope='col';header.append(th);});head.append(header);
+    const header=node('tr');['Year','Month','Original',alternative.name,'Change (pp)'].forEach(label=>{const th=node('th',label);th.scope='col';header.append(th);});head.append(header);
     for(const row of differenceRows()){const tr=node('tr');row.forEach(value=>tr.append(node('td',String(value))));body.append(tr);}
     table.hidden=false;$("table-empty").hidden=true;$("table-count").textContent=`${state.yearIndex*12+1}–${state.yearIndex*12+12} of ${state.rows.length} monthly differences · rounded values`;
     $("page-label").textContent=`${state.yearIndex+1} / ${state.source.rows.length}`;$("previous-page").disabled=state.yearIndex===0;$("next-page").disabled=state.yearIndex===state.source.rows.length-1;controls();return true;

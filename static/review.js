@@ -18,8 +18,8 @@ const Review = (() => {
   function error(message){$("review-error").textContent=message;$("review-error").hidden=!message;}
   function controls(){
     $("run-review").disabled=state.busy || !state.rows.length;
-    $("run-review").firstChild.textContent=reviewing ? "Reviewing…" : state.review ? "Refresh review" : "Run review";
-    $("run-influence").textContent=measuring ? "Measuring…" : "Measure influence";
+    $("run-review").firstChild.textContent=reviewing ? "Preparing analysis…" : state.review ? "Refresh analysis" : window.Workspace?.reviewAction() || "Prepare analysis";
+    $("run-influence").textContent=measuring ? "Testing…" : "Test this change";
     $("curve-review").setAttribute("aria-busy",String(reviewing || measuring));
     for(const id of ["run-influence","influence-year","influence-change","review-series","method-review-year","download-review"])$(id).disabled=state.busy || !state.review;
   }
@@ -53,7 +53,7 @@ const Review = (() => {
   }
   function render(){
     const report=state.review;
-    if(!report){$("review-content").hidden=true;$("review-status").textContent=state.rows.length ? "Ready to review this result. Both methods use the same yearly inputs." : "Generate a curve to start its review.";error("");controls();return;}
+    if(!report){$("review-content").hidden=true;$("review-status").textContent=state.rows.length ? "This uses your current result and yearly inputs." : "Generate a curve to start its review.";error("");controls();window.Workspace?.navigation();return;}
     if(!state.source.columns.includes(view.column))view.column=state.source.columns[0];
     view.yearIndex=Math.max(0,Math.min(view.yearIndex,state.source.rows.length-1));
     options($("review-series"),state.source.columns.map(column=>[column,column]),view.column);
@@ -61,12 +61,13 @@ const Review = (() => {
     options($("method-review-year"),years,view.yearIndex);options($("influence-year"),years,view.yearIndex);
     $("review-content").hidden=false;
     $("review-status").textContent=`${state.resultMode==="average" ? "Average" : "Exit"} result reviewed · ${new Date(report.generated_at).toLocaleString()} · Raw values checked`;
-    switchTab(view.tab);renderSignals();renderDrivers();renderMethods();renderRecord();renderInfluence();controls();
+    switchTab(view.tab,false);renderSignals();renderDrivers();renderMethods();renderRecord();renderInfluence();controls();window.Workspace?.navigation();
   }
-  function switchTab(tab){
+  function switchTab(tab,notify=true){
     view.tab=tabs.includes(tab) ? tab : "signals";
     for(const name of tabs){const active=name===view.tab,button=$(`${name}-review-tab`);button.classList.toggle("active",active);button.setAttribute("aria-selected",String(active));button.tabIndex=active ? 0 : -1;$(`${name}-review`).hidden=!active;}
     if(view.tab==="methods" && state.review)renderMethodChart();
+    if(notify)window.Workspace?.show(view.tab,{fromReview:true});
   }
   function renderSignals(){
     const item=series(),list=$("review-signals");list.replaceChildren();
@@ -85,6 +86,7 @@ const Review = (() => {
         copy.append(node("strong",`${event.source==="monthly" ? "Monthly" : "Yearly target"} ${event.kind}`),node("small",`${at}${at!==through ? ` – ${through}` : ""} · ${percent(event.value,3)}. ${event.kind==="peak" ? "Rise changes to fall." : "Fall changes to rise."}`));
       }
       button.append(node("span",undefined,"signal-marker"),copy);button.addEventListener("click",()=>{
+        window.Workspace?.show("results");
         if(!state.visible.has(view.column)){state.visible.add(view.column);renderLegend();renderChart();}
         state.yearIndex=Math.min(state.source.rows.length-1,Math.floor(event.index/12));state.tab="monthly";renderTable();inspect(event.index);$("chart").scrollIntoView({block:"center",behavior:motionPreference.matches ? "instant" : "smooth"});$("chart").focus({preventScroll:true});
       });list.append(button);
@@ -94,6 +96,9 @@ const Review = (() => {
   }
   function renderDrivers(){
     const item=series(),container=$("review-drivers");container.replaceChildren();
+    const plain=$("plain-curve-explanation");plain.replaceChildren();
+    const copy=state.resultMode==="average" ? ["Your yearly input sets the average of that year's twelve months. The months can differ; they balance back to the yearly target before display rounding.","The model considers the full timeline, so neighboring years influence how the curve rises or falls. It prefers gradual changes and stays close to this column's yearly range when possible."] : ["Your yearly input sets December's value. The other months are calculated together across the full timeline, so they form a smooth path between the yearly targets.","The yearly average is not fixed in Exit. The first month must be non-negative, and values can move outside the range of the yearly inputs."];
+    plain.append(...copy.map(text=>node("p",text)));
     const add=(title,description)=>{const div=node("div",undefined,"driver-item");div.append(node("strong",title),node("p",description));container.append(div);};
     add(state.resultMode==="average" ? "Your yearly means are fixed" : "Your December targets are fixed",state.resultMode==="average" ? `All ${item.annual_checks.length} yearly means are checked against their targets before rounding. A midpoint marker is a reference, not a required value for that month.` : `Each December equals its yearly target. Other months are solved together across the timeline; their yearly mean is not pinned.`);
     add("The optimizer discourages abrupt bends",`It minimizes squared second differences across adjacent months, including year boundaries. This favors gradual changes; it does not guarantee a monotonic curve. Normalized curvature cost: ${unit(item.curvature_cost_normalized,6)}.${item.solution_kind==="flat fallback" ? " Constant targets use the flat fallback; no optimization is needed for this series." : ""}`);
@@ -166,13 +171,14 @@ const Review = (() => {
     const result=state.influence,element=$("influence-result");element.hidden=!result;
     if(result)element.textContent=`Measured ${result.column}, ${yearName(result.year)}: target ${percent(result.before_target,6)} → ${percent(result.after_target,6)}. Largest monthly response: ${unit(result.largest_monthly_change,6)} pp in ${monthName(result.at)}. All other yearly targets stayed fixed. This is a temporary experiment, not an applied change or causal explanation.`;
   }
-  function settings(){return {...view,visibleSeries:[...state.visible],showTargets:$("show-targets").checked,compareBaseline:$("compare-baseline").checked};}
+  function settings(){return {...view,workflowPage:window.Workspace?.page(),visibleSeries:[...state.visible],showTargets:$("show-targets").checked,compareBaseline:$("compare-baseline").checked};}
   function restoreSettings(saved){
     view.tab=tabs.includes(saved?.tab) ? saved.tab : "signals";view.column=state.source?.columns.includes(saved?.column) ? saved.column : null;
     view.yearIndex=Number.isInteger(saved?.yearIndex) && saved.yearIndex>=0 && saved.yearIndex<state.source.rows.length ? saved.yearIndex : 0;
     if(Array.isArray(saved?.visibleSeries)){const visible=saved.visibleSeries.filter(value=>state.source.columns.includes(value));if(visible.length)state.visible=new Set(visible);}
     if(typeof saved?.showTargets==="boolean")$("show-targets").checked=saved.showTargets;
     if(typeof saved?.compareBaseline==="boolean")$("compare-baseline").checked=saved.compareBaseline;
+    if(typeof saved?.workflowPage==="string")window.Workspace?.show(saved.workflowPage,{force:true});
   }
   $("run-review").addEventListener("click",run);$("influence-form").addEventListener("submit",measure);
   $("review-series").addEventListener("change",event=>{view.column=event.target.value;render();});
@@ -181,7 +187,7 @@ const Review = (() => {
   for(const tab of tabs){$(`${tab}-review-tab`).addEventListener("click",()=>switchTab(tab));$(`${tab}-review-tab`).addEventListener("keydown",event=>{if(!["ArrowLeft","ArrowRight","Home","End"].includes(event.key))return;event.preventDefault();const index=event.key==="Home" ? 0 : event.key==="End" ? tabs.length-1 : (tabs.indexOf(tab)+(event.key==="ArrowRight" ? 1 : -1)+tabs.length)%tabs.length;switchTab(tabs[index]);$(`${tabs[index]}-review-tab`).focus();});}
   $("download-review").addEventListener("click",()=>{if(state.busy || !state.review)return;saveBlob(new Blob([JSON.stringify({review:state.review,influence:state.influence || null,selectedMethod:state.resultMode,view:settings()},null,2)],{type:"application/json"}),"curve-review.json");toast("Calculation record download ready.");});
   let resize;window.addEventListener("resize",()=>{clearTimeout(resize);resize=setTimeout(()=>{if(view.tab==="methods" && state.review)renderMethodChart();},120);});
-  return {render,controls,settings,restoreSettings,fetchReport,accepts};
+  return {render,controls,settings,restoreSettings,fetchReport,accepts,selectTab:tab=>switchTab(tab,false)};
 })();
 window.Review=Review;
 Review.render();
