@@ -177,5 +177,5 @@ def test_review_workload_and_typography_assets():
     font = client.get("/assets/fonts/InterVariable.woff2")
     assert font.status_code == 200 and font.content.startswith(b"wOF2")
     assert "SIL OPEN FONT LICENSE" in client.get("/assets/fonts/LICENSE.txt").text
-    for name in ["review.js","review.css"]:
+    for name in ["upload.js","upload.css"]:
         assert client.get("/assets/"+name).status_code == 200

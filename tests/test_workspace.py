@@ -10,7 +10,7 @@ def test_workspace_and_sample_are_served():
     response = client.get("/")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    for asset in ["workspace.css", "workspace.js", "scenarios.js", "adoption-sample.csv"]:
+    for asset in ["upload.css", "upload.js", "adoption-sample.csv"]:
         assert client.get("/assets/" + asset).status_code == 200
     sample = client.get("/assets/adoption-sample.csv").content
     preview = client.post("/preview", files={"file": ("sample.csv", sample)})
