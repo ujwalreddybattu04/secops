@@ -54,3 +54,37 @@ The scenario release preserves `smoothing.py` and `outputs.py` byte for byte aga
 The Python suite passed **299 tests** locally. Real Chrome checks cover both methods, invalid/blank drafts, unchanged baseline data, actual assumption revision restoration, save/open through the file-input event, corrupted checksums, untrusted archived output snapshots, invalid/oversized project files, literal Unicode and `__proto__` headers, an engine change during comparison/export, extreme-magnitude failure, and permitted values greater than 100. Desktop, tablet, and mobile layouts were inspected. The public repository contains only code and synthetic fixtures.
 
 Project files contain readable source data and are stored only where the analyst downloads them. Checksums detect byte changes; they do not establish authorship or authorization. A page reload loses any work that has not been downloaded. This release does not add company login, server persistence, approval trails, or a forecast-accuracy guarantee.
+
+## Phase 1 trust and explainability — 9 October 2026
+
+The development workspace now provides deterministic sharp-change and turning-
+point detection, rule explanations, one-target sensitivity experiments, a same-
+input Average/Exit comparison, and portable validation/settings records. No LLM
+API or additional dependency is required. `smoothing.py` and `outputs.py` remain
+byte-identical to development commit `ed2c45ee8c8343810e758de471d5282766ed5ee0`.
+
+The complete Python suite passed **332 tests**. New tests independently recompute
+Decimal annual errors, compare review rows with conversion outputs, check
+plateau/noise/negative-value detection and scale invariance, exercise unavailable
+comparison methods, verify actual one-target re-solves without source mutation,
+and cover precision/encoding/limit/capacity protections. A local 50-year/five-
+series HTTP review of both methods, including Decimal checks, took **0.544 s**;
+this excludes network transfer and cold starts and is not a production SLA.
+
+Real Chrome checks passed the new workflow, literal/Unicode labels, tab keyboard
+navigation, temporary measurements, record/project downloads, tampered-review
+recalculation, engine-change rejection, report invalidation/restoration, and
+comparison/timeout failures that preserve valid results. Existing scenario and
+chart-motion browser suites also passed. Review layouts were inspected at 1440,
+900, 390 and 320 px, with no page overflow or browser exceptions. The official
+Inter Variable font and license are self-hosted and its actual loading was checked.
+
+Browser verification found and fixed two existing project-flow defects: the
+imported JSON variable shadowed the DOM `document`, and scenario activation
+called the scenario-only renderer instead of the full workspace renderer. Tests
+now verify successful reopening and full scenario/report refresh.
+
+These reviews explain the implemented equations and measure model responses.
+They do not infer real-world causes, validate business assumptions, give forecast
+confidence, imply analyst approval, or promise monotonicity/hard percentage bounds.
+Company identity, shared storage and authenticated review history remain later work.

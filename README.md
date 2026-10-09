@@ -202,3 +202,60 @@ Before constructing the optimizer, each column's largest/smallest nonzero absolu
 Every returned Average column, including single-year and constant fast paths, is independently checked after rescaling using Decimal arithmetic at 800-digit precision. Each year's relative mean error must be less than 1e-6, with a denominator floor of 1e-6 (equivalent to an absolute tolerance of 1e-12 near zero). Only tiny raw-unit equality residuals can be refined, by adjusting one small-magnitude month other than M1; the complete result must still pass verification. Unverifiable or non-finite output raises a named error instead of returning silently incorrect data. This check applies before two-decimal percentage display formatting.
 
 Exit reuses the same magnitude-ratio guard and scaling. Normalized December and first-month solver residuals must be within 1e-8 before roundoff cleanup. December values are then assigned the original targets exactly, and every returned column is independently checked for finiteness, non-negative M1, and December accuracy using the same Decimal precision and tolerance as Average. Single-year and constant return paths also pass these checks.
+
+## Curve review: trust and explainability
+
+Generate a result, then select **Run review** in the panel beneath the chart.
+Review is explicit so ordinary CSV/JSON/PDF conversion pays no additional solve
+cost. It does not change either smoothing algorithm.
+
+- **Shape & drivers** flags sharp yearly changes and turning points in yearly
+  targets and raw monthly values. Select a flag to inspect its month on the main
+  graph. Each series has its own findings and explanations of its annual
+  constraint, curvature objective, first-month minimum and optional soft range.
+- **Compare methods** runs Average and Exit on identical input under one engine
+  version. It shows both full-timeline curves and a selectable year's monthly
+  values and differences. This is separate from baseline/alternative comparison.
+  An unavailable comparison method is explained without discarding the selected
+  method's valid result.
+- **Calculation record** includes finite-value, raw annual-constraint and
+  first-month checks, per-year errors and tolerances, display-rounding errors,
+  solver configuration, package versions, detection rules and engine fingerprint.
+  It can be downloaded as JSON and is included in **Save project** after review.
+- **Test one target's influence** performs a temporary one-target perturbation.
+  It reports the actual largest monthly response from re-solving that series,
+  keeping all other yearly targets fixed. This never applies an edit to the
+  project. Data-dependent ranges and first-month floors are recalculated with
+  the changed target. It is a model sensitivity experiment, not causal attribution, a
+  derivative, or a forecast of how a real business will respond.
+
+`POST /review?mode=average|exit` accepts the same CSV upload and returns a review
+document for both methods. A selected-method error retains the existing HTTP 400
+behavior. `POST /influence?mode=...&column=...&year=...&change=...` returns a measured
+one-target response; `change` is in the same numeric units as the input (percentage
+points for percentage data). Both endpoints share upload/workload limits,
+precision guards, the conversion capacity slot and no-store cache policy.
+
+A sharp-change flag requires a yearly change of at least 25% of that column's
+input span and twice its median non-zero yearly change. With only one change,
+this relative-outlier rule cannot flag it as unusual. Turning-point detection
+groups flat plateaus and ignores changes below a relative numerical noise floor.
+These are transparent descriptive heuristics, not statistical significance,
+forecast confidence or a guarantee of continuous mathematical differentiability.
+Records include total event counts and up to 200 events per kind per series.
+
+Project schema version 1 remains backward compatible. Optional review snapshots,
+influence experiments and workspace display settings are saved. On reopen,
+monthly results and previously requested reviews are recalculated; imported
+pass/fail flags and output snapshots never bypass verification. Historical
+influence snapshots remain in the downloaded archive but are not presented as
+current measurements on reopening. These are portable local files, not server
+storage, user accounts, shared permissions or an approval audit trail.
+
+The workspace uses self-hosted Inter Variable with its bundled license; see
+`static/fonts/README.md`. It has keyboard-operated review tabs, literal-text
+rendering, responsive tables and the existing reduced-motion chart behavior.
+
+Backend tests: `python -m pytest -q`. Optional real-browser review regression:
+`python tests/browser_curve_review.py --url http://127.0.0.1:8000/` after installing
+Playwright and its Chromium browser as described in `tests/browser_scenarios.py`.

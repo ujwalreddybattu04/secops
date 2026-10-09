@@ -19,6 +19,7 @@ from fastapi.responses import Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from outputs import to_csv_response, to_json_response, to_pdf_response
+from curve_review import method_review, review_document, influence_document
 
 
 class Mode(str, Enum):
@@ -49,7 +50,7 @@ _conversion_capacity = BoundedSemaphore(1)
 def _engine_metadata() -> dict:
     dependencies = {name: version(name) for name in ("numpy", "pandas", "scipy", "cvxpy", "osqp")}
     digest = hashlib.sha256()
-    for name in ("main.py", "smoothing.py", "outputs.py"):
+    for name in ("main.py", "smoothing.py", "outputs.py", "curve_review.py"):
         digest.update(name.encode())
         digest.update((Path(__file__).parent / name).read_bytes())
     for name, dependency_version in sorted(dependencies.items()):
@@ -70,11 +71,11 @@ async def response_protection(request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    if request.url.path in ("/convert", "/preview"):
+    if request.url.path in ("/convert", "/preview", "/review", "/influence"):
         response.headers["Cache-Control"] = "no-store"
     if request.url.path in ("/", "/engine") or request.url.path.startswith("/assets/"):
         response.headers["Cache-Control"] = "no-cache"
-    if request.url.path == "/convert" and response.status_code == 200:
+    if request.url.path in ("/convert", "/review", "/influence") and response.status_code == 200:
         response.headers["X-Calculation-Engine"] = ENGINE_METADATA["id"]
     if request.url.path == "/":
         response.headers["Content-Security-Policy"] = (
@@ -297,6 +298,66 @@ def preview(file: UploadFile = File(...)) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"columns": columns, "rows": data.to_dict(orient="records")}
+
+
+@app.post("/review", responses={code: details for code, details in CONVERSION_RESPONSES.items() if code != 200})
+def review(file: UploadFile = File(...), mode: Mode = Query(...)) -> dict:
+    """Review both methods against identical input and the same engine version.
+
+    A failure in the comparison method is reported without discarding a valid
+    selected-method review. This endpoint does not change conversion outputs.
+    """
+    with _conversion_slot():
+        try:
+            data, columns = _validated_yearly_frame(_uploaded_yearly_frame(file))
+            if "month" in columns:
+                raise ValueError("Rename the value column 'month'; it is reserved for review month numbers.")
+            selected = yearly_to_monthly(data, mode)
+            methods = {mode.value: method_review(data, selected, columns, mode.value)}
+            other = Mode.exit if mode == Mode.average else Mode.average
+            try:
+                monthly = yearly_to_monthly(data, other)
+                methods[other.value] = method_review(data, monthly, columns, other.value)
+            except ValueError as exc:
+                methods[other.value] = {"status": "unavailable", "mode": other.value, "detail": str(exc)}
+            return review_document(data, columns, methods, ENGINE_METADATA)
+        except RequestLimitError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/influence", responses={code: details for code, details in CONVERSION_RESPONSES.items() if code != 200})
+def influence(file: UploadFile = File(...), mode: Mode = Query(...),
+              column: str = Query(..., max_length=MAX_HEADER_CHARACTERS),
+              year: int = Query(...), change: float = Query(...)) -> dict:
+    """Measure a single target edit, without applying it to the analyst project."""
+    with _conversion_slot():
+        try:
+            data, columns = _validated_yearly_frame(_uploaded_yearly_frame(file))
+            if column not in columns or column == "month":
+                raise ValueError("Choose a value series from this input.")
+            matches = data.index[data["year"] == year].tolist()
+            if not matches:
+                raise ValueError("Choose a year from this input.")
+            if not math.isfinite(change) or change == 0:
+                raise ValueError("Target change must be a finite, non-zero number.")
+            # Series are independent; only the selected series needs re-solving.
+            original = data[["year", column]].copy()
+            modified = original.copy()
+            index = matches[0]
+            old = float(original.at[index, column])
+            new = old + change
+            if not math.isfinite(new) or new == old:
+                raise ValueError("This target change is too large or too small to represent safely.")
+            modified.at[index, column] = new
+            before = yearly_to_monthly(original, mode)
+            after = yearly_to_monthly(modified, mode)
+            return influence_document(before, after, column, year, old, new, mode.value, ENGINE_METADATA)
+        except RequestLimitError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/convert", response_class=Response, responses=CONVERSION_RESPONSES)

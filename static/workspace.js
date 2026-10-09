@@ -26,6 +26,7 @@ function controls(){
   for(const id of ["export-csv","export-pdf"])$(id).disabled=state.busy || !state.rows.length;
   $("copy-table").disabled=state.busy || !(state.tab==="yearly" ? state.source : state.rows.length);
   window.Scenarios?.controls();
+  window.Review?.controls();
 }
 function retryDelay(milliseconds,signal){
   return new Promise((resolve,reject)=>{
@@ -49,7 +50,7 @@ async function post(path,file,signal){
   if(!response.ok){let message=`The service could not complete this request (${response.status}). Please try again.`; try{const body=await response.json(); if(typeof body.detail==="string")message=body.detail; else if(Array.isArray(body.detail))message=body.detail.map(item=>item.msg).join(" ");}catch{} throw new Error(message);}
   return response;
 }
-function clearResult(){state.rows=[]; state.resultMode=null; state.engineId=null; state.stats=[]; state.yearIndex=0; state.inspected=null; $("chart-tooltip").hidden=true;}
+function clearResult(){state.rows=[]; state.resultMode=null; state.engineId=null; state.review=null;state.influence=null; state.stats=[]; state.yearIndex=0; state.inspected=null; $("chart-tooltip").hidden=true;}
 function handleFailure(error,revision){if(revision!==state.revision)return; showError(error.name==="AbortError" ? "The request took too long. Please try again; a sleeping development service may need time to start." : error.message);}
 async function generateResult(revision){
   await window.Scenarios?.prepare(state.controller.signal);
@@ -105,6 +106,7 @@ function render(){
   $("chart-empty").hidden=hasResult;
   window.Scenarios?.render();
   renderLegend();renderChart();renderTable();controls();
+  window.Review?.render();
 }
 function renderLegend(){
   const legend=$("series-legend");legend.replaceChildren();

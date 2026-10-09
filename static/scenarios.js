@@ -13,10 +13,11 @@ const Scenarios = (() => {
   const current=()=>active==="baseline" ? baseline : alternative;
   function snapshot(){return {name:"Baseline",file:state.file,source:clone(state.source),sample:state.sample,rows:[],mode:null,engineId:null,generatedAt:null};}
   function captureInput(){baseline=snapshot();render();}
-  function clearSnapshot(item){if(item){item.rows=[];item.mode=null;item.engineId=null;item.generatedAt=null;}}
+  function clearSnapshot(item){if(item){item.rows=[];item.mode=null;item.engineId=null;item.generatedAt=null;item.review=null;item.influence=null;}}
+  function captureReview(){const item=current();if(item){item.review=state.review;item.influence=state.influence;dirty=true;}}
   function capture(){
     const item=current();if(!item)return;
-    item.rows=clone(state.rows);item.mode=state.resultMode;item.engineId=state.engineId;item.generatedAt=stamp();dirty=true;
+    item.rows=clone(state.rows);item.mode=state.resultMode;item.engineId=state.engineId;item.generatedAt=stamp();item.review=state.review || null;item.influence=state.influence || null;dirty=true;
     if(active==="alternative" && baseline.engineId!==item.engineId){clearSnapshot(item);clearResult();throw new Error("The calculation service changed during comparison. Generate again to use one version for both curves.");}
   }
   async function checkedSource(file,signal){
@@ -32,12 +33,16 @@ const Scenarios = (() => {
       const row=rows[index];
       if(row.year!==item.source.rows[Math.floor(index/12)].year || row.month!==index%12+1 || item.source.columns.some(column=>typeof row[column]!=="string" || !Number.isFinite(numeric(row[column]))))throw new Error("The calculation service returned unexpected monthly values.");
     }
-    return {rows,mode,engineId,generatedAt:stamp()};
+    return {rows,mode,engineId,generatedAt:stamp(),review:null,influence:null};
   }
   async function prepare(signal){
     if(active!=="alternative")return;
     $("process-status").textContent="Calculating the baseline for a consistent comparison…";
-    Object.assign(baseline,await calculate(baseline,state.mode,signal));
+    const result=await calculate(baseline,state.mode,signal);
+    if(window.Review?.accepts(baseline.review,baseline.source,result.rows,state.mode,result.engineId)){
+      result.review=baseline.review;result.influence=baseline.influence;
+    }
+    Object.assign(baseline,result);
   }
   function comparison(){
     return active==="alternative" && state.rows.length && baseline?.rows.length===state.rows.length && baseline.mode===state.resultMode && baseline.engineId===state.engineId ? baseline : null;
@@ -45,8 +50,8 @@ const Scenarios = (() => {
   function activate(which){
     if(state.busy || !(which==="baseline" ? baseline : alternative))return;
     active=which;const item=current();
-    state.file=item.file;state.source=clone(item.source);state.sample=item.sample;state.rows=clone(item.rows);state.resultMode=item.mode;state.engineId=item.engineId;
-    state.yearIndex=0;state.sourcePage=0;state.tab="monthly";state.inspected=null;state.stats=calculateRanges();hideInspection();render();
+    state.file=item.file;state.source=clone(item.source);state.sample=item.sample;state.rows=clone(item.rows);state.resultMode=item.mode;state.engineId=item.engineId;state.review=item.review || null;state.influence=item.influence || null;
+    state.yearIndex=0;state.sourcePage=0;state.tab="monthly";state.inspected=null;state.stats=calculateRanges();hideInspection();window.render();
     $("process-status").textContent=state.rows.length ? "Curve ready to review." : "Assumptions ready. Generate to calculate this scenario.";
   }
   function controls(){
@@ -149,12 +154,12 @@ const Scenarios = (() => {
   async function hash(bytes){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),value=>value.toString(16).padStart(2,'0')).join('');}
   function encode(bytes){let result='';for(let index=0;index<bytes.length;index+=32768)result+=String.fromCharCode(...bytes.subarray(index,index+32768));return btoa(result);}
   function decode(value){if(typeof value!=='string' || value.length>14*1024*1024 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value))throw new Error('The project contains an invalid original CSV.');const text=atob(value);return Uint8Array.from(text,char=>char.charCodeAt(0));}
-  const results=(item)=>item.rows.length ? {mode:item.mode,engineId:item.engineId,generatedAt:item.generatedAt,rows:item.rows} : null;
+  const results=(item)=>item.rows.length ? {mode:item.mode,engineId:item.engineId,generatedAt:item.generatedAt,rows:item.rows,review:item.review || null,influence:item.influence || null} : null;
   async function projectDocument(){
     const bytes=new Uint8Array(await baseline.file.arrayBuffer());
     const name=$("project-name").value.trim() || 'Untitled analysis';
     if(!safeName(name,80))throw new Error('Use a project name of 1–80 characters without control characters.');
-    return {schema:'interpolation-project',version:1,name,savedAt:stamp(),mode:state.mode,active,
+    return {schema:'interpolation-project',version:1,name,savedAt:stamp(),mode:state.mode,active,workspaceSettings:window.Review?.settings(),
       baseline:{filename:baseline.file.name,encoding:'base64',bytes:encode(bytes),sha256:await hash(bytes),result:results(baseline)},
       alternative:alternative ? {name:alternative.name,source:clone(alternative.source),revisions:clone(alternative.revisions),result:results(alternative)} : null};
   }
@@ -174,26 +179,31 @@ const Scenarios = (() => {
     if(!mayReplace())return;
     const revision=operation('Opening and recalculating the project…'),timer=setTimeout(()=>state.controller.abort(),180000);
     try{
-      const document=JSON.parse(await file.text());
-      if(document.schema!=='interpolation-project' || document.version!==1 || !safeName(document.name,80) || !['average','exit'].includes(document.mode) || !['baseline','alternative'].includes(document.active) || !document.baseline || document.baseline.encoding!=='base64' || !safeName(document.baseline.filename,255) || !document.baseline.filename.toLowerCase().endsWith('.csv'))throw new Error('This is not a supported Interpolation project (version 1).');
-      const bytes=decode(document.baseline.bytes);
-      if(bytes.length>10*1024*1024 || await hash(bytes)!==document.baseline.sha256)throw new Error('The original CSV does not match its saved checksum. Open the CSV separately to start a new project.');
-      const baseFile=new File([bytes],document.baseline.filename,{type:'text/csv'}),baseSource=await checkedSource(baseFile,state.controller.signal);
+      const project=JSON.parse(await file.text());
+      if(project.schema!=='interpolation-project' || project.version!==1 || !safeName(project.name,80) || !['average','exit'].includes(project.mode) || !['baseline','alternative'].includes(project.active) || !project.baseline || project.baseline.encoding!=='base64' || !safeName(project.baseline.filename,255) || !project.baseline.filename.toLowerCase().endsWith('.csv'))throw new Error('This is not a supported Interpolation project (version 1).');
+      const bytes=decode(project.baseline.bytes);
+      if(bytes.length>10*1024*1024 || await hash(bytes)!==project.baseline.sha256)throw new Error('The original CSV does not match its saved checksum. Open the CSV separately to start a new project.');
+      const baseFile=new File([bytes],project.baseline.filename,{type:'text/csv'}),baseSource=await checkedSource(baseFile,state.controller.signal);
       const nextBase={name:'Baseline',file:baseFile,source:baseSource,sample:false};let nextAlt=null;
-      if(document.alternative!==null){
-        const saved=document.alternative;
+      if(project.alternative!==null){
+        const saved=project.alternative;
         if(!saved || !safeName(saved.name,64) || !Array.isArray(saved.revisions) || saved.revisions.length>5)throw new Error('The alternative scenario is not valid.');
         const source=validateSource(saved.source,baseSource),altFile=csvFile(source);
         const history=saved.revisions.map(item=>{if(!item || !safeName(item.name,64) || !Number.isFinite(Date.parse(item.at)))throw new Error('A saved assumption revision is invalid.');return {name:item.name,at:item.at,source:clone(validateSource(item.source,baseSource))};});
         nextAlt={name:saved.name,file:altFile,source:await checkedSource(altFile,state.controller.signal),sample:false,revisions:history};
       }
-      if(document.active==='alternative' && !nextAlt)throw new Error('The selected alternative scenario is missing.');
-      Object.assign(nextBase,await calculate(nextBase,document.mode,state.controller.signal));
-      if(nextAlt){Object.assign(nextAlt,await calculate(nextAlt,document.mode,state.controller.signal));if(nextAlt.engineId!==nextBase.engineId)throw new Error('The service changed during recalculation. Open the project again.');}
-      baseline=nextBase;alternative=nextAlt;state.mode=document.mode;$("project-name").value=document.name;
+      if(project.active==='alternative' && !nextAlt)throw new Error('The selected alternative scenario is missing.');
+      Object.assign(nextBase,await calculate(nextBase,project.mode,state.controller.signal));
+      if(nextAlt){Object.assign(nextAlt,await calculate(nextAlt,project.mode,state.controller.signal));if(nextAlt.engineId!==nextBase.engineId)throw new Error('The service changed during recalculation. Open the project again.');}
+      // Saved diagnostics are history, not evidence. Recompute if the analyst
+      // previously reviewed that scenario. Never trust imported pass/fail flags.
+      if(project.baseline.result?.review && window.Review)nextBase.review=await Review.fetchReport(nextBase,project.mode,state.controller.signal);
+      if(nextAlt && project.alternative.result?.review && window.Review)nextAlt.review=await Review.fetchReport(nextAlt,project.mode,state.controller.signal);
+      baseline=nextBase;alternative=nextAlt;state.mode=project.mode;$("project-name").value=project.name;
       for(const input of document.querySelectorAll('input[name="mode"]'))input.checked=input.value===state.mode;
-      state.visible=new Set(baseSource.columns.slice(0,3));state.busy=false;dirty=false;activate(document.active);
-      const oldEngine=document.baseline.result?.engineId;
+      state.visible=new Set(baseSource.columns.slice(0,3));state.busy=false;dirty=false;activate(project.active);
+      window.Review?.restoreSettings(project.workspaceSettings);render();
+      const oldEngine=project.baseline.result?.engineId;
       toast(oldEngine && oldEngine!==nextBase.engineId ? 'Project reopened using the current engine. Download it to keep the recalculated results.' : 'Project reopened and recalculated.');
     }catch(error){handleFailure(error instanceof SyntaxError ? new Error('This project file is not valid JSON.') : error,revision);}finally{clearTimeout(timer);finish(revision);}
   }
@@ -224,7 +234,7 @@ const Scenarios = (() => {
   $("save-project").addEventListener('click',saveProject);$("open-project").addEventListener('click',()=>$("project-file").click());
   $("project-file").addEventListener('change',event=>{openProject(event.target.files[0]);event.target.value='';});
   $("project-name").addEventListener('input',()=>{dirty=true;});
-  return {captureInput,capture,prepare,comparison,controls,render,renderDifference,differenceRows,exportName,mayReplace,reset,methodChanged,projectDocument,openProject};
+  return {captureInput,capture,captureReview,prepare,comparison,controls,render,renderDifference,differenceRows,exportName,mayReplace,reset,methodChanged,projectDocument,openProject};
 })();
 window.Scenarios=Scenarios;
 render();sample();
